@@ -26,11 +26,22 @@ enum AlertStatus {
 
 enum WasteCategory {
   ORGANIK
+  ANORGANIK
   ANORGANIK_PLASTIK
   ANORGANIK_KERTAS
   ANORGANIK_LOGAM
   ANORGANIK_KACA
   RESIDU
+}
+
+enum SessionStatus {
+  WAITING_TRASH      // Menunggu sampah masuk (5 menit)
+  TRASH_DETECTED     // Sensor ultrasonic mendeteksi sampah
+  AI_PROCESSING      // Sedang dianalisis AI Vision
+  COMPLETED          // Berhasil disetujui, saldo cair
+  NEEDS_REVIEW       // AI ragu atau gagal, perlu tinjauan petugas
+  REJECTED           // Ditolak petugas
+  EXPIRED            // Sesi kadaluarsa
 }
 
 enum WithdrawalStatus {
@@ -52,6 +63,7 @@ model Banjar {
   users       User[]
   stations    Station[]
   wasteTypes  WasteType[]
+  tariff      StationTariff?
 }
 
 model User {
@@ -66,9 +78,11 @@ model User {
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
-  // Relasi Bank Sampah
-  depositsRecorded Deposit[]     @relation("OperatorDeposits")
-  depositsReceived Deposit[]     @relation("CitizenDeposits")
+  // Relasi Bank Sampah & Sesi
+  depositsRecorded Deposit[]        @relation("OperatorDeposits")
+  depositsReceived Deposit[]        @relation("CitizenDeposits")
+  depositSessions  DepositSession[] @relation("CitizenSessions")
+  reviewedSessions DepositSession[] @relation("OfficerReviews")
   withdrawals      Withdrawal[]
   ledgerEntries    PointLedger[]
 
@@ -86,16 +100,23 @@ model Station {
   banjar          Banjar          @relation(fields: [banjarId], references: [id], onDelete: Cascade)
   
   // Ambang batas alert konfigurabel per stasiun
-  tempWarnThreshold  Float        @default(45.0)
-  tempDangerThreshold Float       @default(60.0)
-  smokeWarnThreshold Float        @default(300.0)
+  tempWarnThreshold    Float      @default(45.0)
+  tempDangerThreshold  Float      @default(60.0)
+  smokeWarnThreshold   Float      @default(300.0)
   smokeDangerThreshold Float      @default(600.0)
+  fillWarnThreshold    Float      @default(80.0) // Tong hampir penuh (>= 80%)
+
+  // Status live sensor
+  currentFillLevel     Float      @default(0.0) // Persentase isi tong (%)
+  lastFillAlertAt      DateTime?
 
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
   readings        SensorReading[]
   alerts          Alert[]
+  events          StationEvent[]
+  sessions        DepositSession[]
 
   @@index([banjarId])
   @@index([deviceId])
@@ -106,18 +127,96 @@ model SensorReading {
   stationId   String
   station     Station  @relation(fields: [stationId], references: [id], onDelete: Cascade)
   temp        Float    // Suhu infrared / termal (°C)
-  smoke       Float    // Gas / smoke sensor (PPM / ADC)
-  humidity    Float?   // Kelembapan udara (%)
+  smoke       Float    // Gas / smoke sensor (PPM)
+  humidity    Float?   // Kelembapan (%)
+  fillLevel   Float?   // Tinggi isi tong (%)
   createdAt   DateTime @default(now())
 
   @@index([stationId, createdAt])
+}
+
+model StationEvent {
+  id               String          @id @default(cuid())
+  stationId        String
+  station          Station         @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  type             String          @default("waste_in") // "waste_in"
+  distanceCm       Float?
+  hasActiveSession Boolean         @default(false)
+  isClaimed        Boolean         @default(false) // Mencegah replay / klaim ganda
+  sessionId        String?
+  session          DepositSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  rawPayload       String?
+  createdAt        DateTime        @default(now())
+
+  @@index([stationId, createdAt])
+}
+
+model StationTariff {
+  id            String   @id @default(cuid())
+  banjarId      String   @unique
+  banjar        Banjar   @relation(fields: [banjarId], references: [id], onDelete: Cascade)
+  organicRate   Int      @default(2000) // Saldo flat organik per setoran
+  inorganicRate Int      @default(3000) // Saldo flat anorganik per setoran
+  subRatesJson  String?  // JSON tarif subkategori masa depan
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model DepositSession {
+  id                  String        @id @default(cuid())
+  sessionCode         String        @unique // e.g. "SES-17384912"
+  stationId           String
+  station             Station       @relation(fields: [stationId], references: [id], onDelete: Restrict)
+  citizenId           String
+  citizen             User          @relation("CitizenSessions", fields: [citizenId], references: [id], onDelete: Restrict)
+  status              SessionStatus @default(WAITING_TRASH)
+
+  // Input Warga
+  userCategory        WasteCategory? // ORGANIK atau ANORGANIK
+  imageUrl            String?        // URL / path foto sampah
+  
+  // Deteksi Ultrasonic
+  eventTriggeredAt    DateTime?      // Waktu sensor mendeteksi sampah masuk
+  eventDistanceCm     Float?
+
+  // Hasil AI Vision Anti-Curang
+  aiCategory          String?        // "organik" | "anorganik" | "tidak_jelas"
+  aiSubCategory       String?        // "plastik", "kertas", "sisa_makanan", dll
+  aiConfidence        Float?         // 0 - 1
+  aiReason            String?        // Alasan singkat verifikasi
+  aiTips              String?        // Tips pemilahan sampah
+  aiRawResponse       String?        // JSON lengkap dari LLM Vision
+  
+  // Status Verifikasi & Anti-Curang
+  isCorrected         Boolean        @default(false) // True jika user beda dg AI
+  isCheatingSuspected Boolean        @default(false) // Indikasi kecurangan dicatat
+  retryCount          Int            @default(0)     // Maks 2x foto ulang jika buram
+
+  // Tinjauan Petugas
+  reviewedById        String?
+  reviewedBy          User?          @relation("OfficerReviews", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt          DateTime?
+  reviewNotes         String?
+
+  // Saldo Akhir
+  rewardAmount        Int            @default(0) // Nominal flat rupiah
+
+  expiresAt           DateTime       // Kadaluarsa 5 menit sejak dibuat
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  events              StationEvent[]
+  ledgerEntry         PointLedger?
+
+  @@index([stationId, status])
+  @@index([citizenId, createdAt])
 }
 
 model Alert {
   id          String      @id @default(cuid())
   stationId   String
   station     Station     @relation(fields: [stationId], references: [id], onDelete: Cascade)
-  type        String      // "TEMPERATURE" | "SMOKE" | "COMBINED"
+  type        String      // "TEMPERATURE" | "SMOKE" | "COMBINED" | "BIN_FULL"
   level       AlertLevel  // WASPADA | BAHAYA
   value       Float
   status      AlertStatus @default(ACTIVE)
@@ -158,8 +257,8 @@ model Deposit {
   wasteType    WasteType     @relation(fields: [wasteTypeId], references: [id], onDelete: Restrict)
   weightKg     Float
   pricePerKg   Int
-  totalAmount  Int           // weightKg * pricePerKg (Rupiah)
-  imageUrl     String?       // Foto sampah hasil scan / upload
+  totalAmount  Int
+  imageUrl     String?
   aiPredicted  Boolean       @default(false)
   notes        String?
   createdAt    DateTime      @default(now())
@@ -172,17 +271,19 @@ model Deposit {
 }
 
 model PointLedger {
-  id          String      @id @default(cuid())
-  userId      String
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  amount      Int         // Positif (tambah saldo), negatif (tarik saldo)
-  type        String      // "DEPOSIT" | "WITHDRAWAL" | "ADJUSTMENT"
-  description String
-  depositId   String?     @unique
-  deposit     Deposit?    @relation(fields: [depositId], references: [id], onDelete: SetNull)
-  withdrawalId String?    @unique
-  withdrawal  Withdrawal? @relation(fields: [withdrawalId], references: [id], onDelete: SetNull)
-  createdAt   DateTime    @default(now())
+  id               String          @id @default(cuid())
+  userId           String
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount           Int             // Positif (tambah saldo), negatif (tarik saldo)
+  type             String          // "DEPOSIT_SESSION" | "DEPOSIT" | "WITHDRAWAL" | "ADJUSTMENT"
+  description      String
+  sessionId        String?         @unique
+  depositSession   DepositSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  depositId        String?         @unique
+  deposit          Deposit?        @relation(fields: [depositId], references: [id], onDelete: SetNull)
+  withdrawalId     String?         @unique
+  withdrawal       Withdrawal?     @relation(fields: [withdrawalId], references: [id], onDelete: SetNull)
+  createdAt        DateTime        @default(now())
 
   @@index([userId])
   @@index([createdAt])

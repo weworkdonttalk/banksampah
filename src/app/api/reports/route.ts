@@ -7,20 +7,29 @@ export async function GET(req: NextRequest) {
   const banjarId = req.nextUrl.searchParams.get("banjarId") || session?.banjarId || "bjr_kayumas";
   const format = req.nextUrl.searchParams.get("format");
 
-  const deposits = await dbService.getBanjarReport(banjarId);
+  const deposits = (await dbService.getBanjarReport(banjarId)) as any[];
 
   if (format === "csv") {
     // Generate CSV string
-    const headers = ["ID Setoran", "Tanggal", "ID Warga", "Jenis Sampah", "Berat (kg)", "Harga/kg", "Total (Rp)", "AI Terdeteksi"];
+    const headers = [
+      "ID Sesi",
+      "Tanggal",
+      "ID Warga",
+      "Kategori Warga",
+      "Kategori AI",
+      "Reward (Rp)",
+      "Koreksi AI",
+      "Status",
+    ];
     const rows = deposits.map((d: any) => [
-      d.id,
+      d.sessionCode || d.id,
       new Date(d.createdAt).toISOString(),
       d.citizenId,
-      d.wasteType?.nama || "-",
-      d.weightKg,
-      d.pricePerKg,
-      d.totalAmount,
-      d.aiPredicted ? "YA" : "TIDAK",
+      d.userCategory || d.wasteType?.nama || "ORGANIK",
+      d.aiCategory || (d.aiPredicted ? "AI" : "-"),
+      d.rewardAmount ?? d.totalAmount ?? 0,
+      d.isCorrected ? "YA" : "TIDAK",
+      d.status || "COMPLETED",
     ]);
 
     const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
@@ -34,26 +43,24 @@ export async function GET(req: NextRequest) {
   }
 
   // Ringkasan agregat
-  const totalKg = deposits.reduce((acc: number, cur: any) => acc + cur.weightKg, 0);
-  const totalRupiah = deposits.reduce((acc: number, cur: any) => acc + cur.totalAmount, 0);
-
-  // Breakdown per jenis sampah
-  const breakdownMap: Record<string, { nama: string; kg: number; rupiah: number }> = {};
-  for (const d of deposits) {
-    const key = d.wasteTypeId;
-    const name = d.wasteType?.nama || "Lain-lain";
-    if (!breakdownMap[key]) {
-      breakdownMap[key] = { nama: name, kg: 0, rupiah: 0 };
-    }
-    breakdownMap[key].kg += d.weightKg;
-    breakdownMap[key].rupiah += d.totalAmount;
-  }
+  const totalRupiah = deposits.reduce(
+    (acc: number, cur: any) => acc + (cur.rewardAmount ?? cur.totalAmount ?? 0),
+    0
+  );
+  const totalCorrected = deposits.filter((d: any) => d.isCorrected).length;
+  const organicCount = deposits.filter(
+    (d: any) => (d.userCategory || "").toLowerCase() === "organik" || (d.aiCategory || "").toLowerCase() === "organik"
+  ).length;
+  const inorganicCount = deposits.filter(
+    (d: any) => (d.userCategory || "").toLowerCase() === "anorganik" || (d.aiCategory || "").toLowerCase() === "anorganik"
+  ).length;
 
   return NextResponse.json({
-    totalKg: Number(totalKg.toFixed(2)),
     totalRupiah,
     totalTransactions: deposits.length,
-    breakdown: Object.values(breakdownMap),
+    totalCorrected,
+    organicCount,
+    inorganicCount,
     recentDeposits: deposits.slice(0, 20),
   });
 }

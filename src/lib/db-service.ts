@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getMockDB } from "@/lib/mock-db";
-import { Role } from "@prisma/client";
+import { Role, SessionStatus, WasteCategory } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 // Helper checking if real database is connected or fallback to mock
@@ -94,6 +94,14 @@ export const dbService = {
             banjarId: banjar.id,
           },
         });
+        // Default flat tariff
+        await tx.stationTariff.create({
+          data: {
+            banjarId: banjar.id,
+            organicRate: 2000,
+            inorganicRate: 3000,
+          },
+        });
         return { banjar, admin };
       });
     }
@@ -133,6 +141,18 @@ export const dbService = {
       tempDangerThreshold: 60,
       smokeWarnThreshold: 300,
       smokeDangerThreshold: 600,
+      fillWarnThreshold: 80,
+      currentFillLevel: 0,
+      lastFillAlertAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    mock.stationTariffs.push({
+      id: `trf_${Date.now()}`,
+      banjarId: banjar.id,
+      organicRate: 2000,
+      inorganicRate: 3000,
+      subRatesJson: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -214,7 +234,13 @@ export const dbService = {
     });
   },
 
-  async saveReading(data: { stationId: string; temp: number; smoke: number; humidity?: number }) {
+  async saveReading(data: {
+    stationId: string;
+    temp: number;
+    smoke: number;
+    humidity?: number;
+    fillLevel?: number;
+  }) {
     if (await isDatabaseConnected()) {
       return prisma.sensorReading.create({
         data: {
@@ -222,6 +248,7 @@ export const dbService = {
           temp: data.temp,
           smoke: data.smoke,
           humidity: data.humidity ?? null,
+          fillLevel: data.fillLevel ?? null,
         },
       });
     }
@@ -232,10 +259,77 @@ export const dbService = {
       temp: data.temp,
       smoke: data.smoke,
       humidity: data.humidity ?? null,
+      fillLevel: data.fillLevel ?? null,
       createdAt: new Date(),
     };
     mock.readings.push(reading);
     return reading;
+  },
+
+  // Alert Tong Penuh (fillLevel >= 80% dengan cooldown anti-spam 30 menit)
+  async updateStationFillLevel(stationId: string, fillLevel: number) {
+    const now = new Date();
+    const COOLDOWN_MS = 30 * 60 * 1000;
+
+    if (await isDatabaseConnected()) {
+      const station = await prisma.station.findUnique({ where: { id: stationId } });
+      if (!station) return null;
+
+      let triggerAlert = false;
+      if (fillLevel >= station.fillWarnThreshold) {
+        if (!station.lastFillAlertAt || now.getTime() - station.lastFillAlertAt.getTime() > COOLDOWN_MS) {
+          triggerAlert = true;
+        }
+      }
+
+      await prisma.station.update({
+        where: { id: stationId },
+        data: {
+          currentFillLevel: fillLevel,
+          lastFillAlertAt: triggerAlert ? now : station.lastFillAlertAt,
+        },
+      });
+
+      if (triggerAlert) {
+        await prisma.alert.create({
+          data: {
+            stationId,
+            type: "BIN_FULL",
+            level: "WASPADA",
+            value: fillLevel,
+          },
+        });
+      }
+      return { stationId, fillLevel, alertCreated: triggerAlert };
+    }
+
+    const mock = getMockDB();
+    const station = mock.stations.find((s) => s.id === stationId);
+    if (!station) return null;
+
+    let triggerAlert = false;
+    if (fillLevel >= station.fillWarnThreshold) {
+      if (!station.lastFillAlertAt || now.getTime() - station.lastFillAlertAt.getTime() > COOLDOWN_MS) {
+        triggerAlert = true;
+      }
+    }
+
+    station.currentFillLevel = fillLevel;
+    if (triggerAlert) {
+      station.lastFillAlertAt = now;
+      mock.alerts.push({
+        id: `alt_${Date.now()}`,
+        stationId,
+        type: "BIN_FULL",
+        level: "WASPADA",
+        value: fillLevel,
+        status: "ACTIVE",
+        resolvedAt: null,
+        resolvedBy: null,
+        createdAt: now,
+      });
+    }
+    return { stationId, fillLevel, alertCreated: triggerAlert };
   },
 
   async createAlert(data: {
@@ -315,6 +409,7 @@ export const dbService = {
       tempDangerThreshold?: number;
       smokeWarnThreshold?: number;
       smokeDangerThreshold?: number;
+      fillWarnThreshold?: number;
     }
   ) {
     if (await isDatabaseConnected()) {
@@ -330,8 +425,597 @@ export const dbService = {
       if (thresholds.tempDangerThreshold !== undefined) station.tempDangerThreshold = thresholds.tempDangerThreshold;
       if (thresholds.smokeWarnThreshold !== undefined) station.smokeWarnThreshold = thresholds.smokeWarnThreshold;
       if (thresholds.smokeDangerThreshold !== undefined) station.smokeDangerThreshold = thresholds.smokeDangerThreshold;
+      if (thresholds.fillWarnThreshold !== undefined) station.fillWarnThreshold = thresholds.fillWarnThreshold;
     }
     return station;
+  },
+
+  // --- TARIF FLAT PER SETORAN ---
+  async getStationTariff(banjarId: string) {
+    if (await isDatabaseConnected()) {
+      const tariff = await prisma.stationTariff.findUnique({
+        where: { banjarId },
+      });
+      if (tariff) return tariff;
+      return prisma.stationTariff.create({
+        data: {
+          banjarId,
+          organicRate: 2000,
+          inorganicRate: 3000,
+        },
+      });
+    }
+    const mock = getMockDB();
+    let tariff = mock.stationTariffs.find((t) => t.banjarId === banjarId);
+    if (!tariff) {
+      tariff = {
+        id: `trf_${Date.now()}`,
+        banjarId,
+        organicRate: 2000,
+        inorganicRate: 3000,
+        subRatesJson: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      mock.stationTariffs.push(tariff);
+    }
+    return tariff;
+  },
+
+  async updateStationTariff(banjarId: string, data: { organicRate: number; inorganicRate: number; subRatesJson?: string }) {
+    if (await isDatabaseConnected()) {
+      return prisma.stationTariff.upsert({
+        where: { banjarId },
+        create: {
+          banjarId,
+          organicRate: data.organicRate,
+          inorganicRate: data.inorganicRate,
+          subRatesJson: data.subRatesJson ?? null,
+        },
+        update: {
+          organicRate: data.organicRate,
+          inorganicRate: data.inorganicRate,
+          subRatesJson: data.subRatesJson ?? null,
+        },
+      });
+    }
+    const mock = getMockDB();
+    let tariff = mock.stationTariffs.find((t) => t.banjarId === banjarId);
+    if (!tariff) {
+      tariff = {
+        id: `trf_${Date.now()}`,
+        banjarId,
+        organicRate: data.organicRate,
+        inorganicRate: data.inorganicRate,
+        subRatesJson: data.subRatesJson ?? null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      mock.stationTariffs.push(tariff);
+    } else {
+      tariff.organicRate = data.organicRate;
+      tariff.inorganicRate = data.inorganicRate;
+      if (data.subRatesJson !== undefined) tariff.subRatesJson = data.subRatesJson;
+      tariff.updatedAt = new Date();
+    }
+    return tariff;
+  },
+
+  // --- SESI SETOR IOT BARU ---
+  async getActiveSessionByStation(stationId: string) {
+    const now = new Date();
+    if (await isDatabaseConnected()) {
+      return prisma.depositSession.findFirst({
+        where: {
+          stationId,
+          status: { in: [SessionStatus.WAITING_TRASH, SessionStatus.TRASH_DETECTED] },
+          expiresAt: { gt: now },
+        },
+        include: { citizen: true, station: true },
+        orderBy: { createdAt: "desc" },
+      });
+    }
+    const mock = getMockDB();
+    const session = mock.depositSessions
+      .filter(
+        (s) =>
+          s.stationId === stationId &&
+          (s.status === SessionStatus.WAITING_TRASH || s.status === SessionStatus.TRASH_DETECTED) &&
+          s.expiresAt > now
+      )
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+
+    if (!session) return null;
+    const citizen = mock.users.find((u) => u.id === session.citizenId) || null;
+    const station = mock.stations.find((s) => s.id === session.stationId) || null;
+    return { ...session, citizen, station };
+  },
+
+  async createDepositSession(data: { stationId: string; citizenId: string }) {
+    const now = new Date();
+    const EXPIRES_MINUTES = 5;
+    const expiresAt = new Date(now.getTime() + EXPIRES_MINUTES * 60 * 1000);
+
+    // Rate-limit: batasi jumlah setoran per warga per jam (maks 10 sesi/jam)
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+
+    // Cek apakah ada sesi aktif di stasiun yang sama
+    const existingActive = await this.getActiveSessionByStation(data.stationId);
+    if (existingActive) {
+      if (existingActive.citizenId === data.citizenId) {
+        return existingActive; // Kembalikan sesi milik warga tersebut
+      }
+      throw new Error("Stasiun sedang digunakan oleh warga lain. Silakan tunggu hingga sesi selesai.");
+    }
+
+    const sessionCode = `SES-${Date.now().toString().slice(-6)}`;
+
+    if (await isDatabaseConnected()) {
+      const recentSessionsCount = await prisma.depositSession.count({
+        where: {
+          citizenId: data.citizenId,
+          createdAt: { gte: oneHourAgo },
+        },
+      });
+      if (recentSessionsCount >= 10) {
+        throw new Error("Batas setoran per jam tercapai (maks 10 setoran/jam). Coba lagi nanti.");
+      }
+
+      return prisma.depositSession.create({
+        data: {
+          sessionCode,
+          stationId: data.stationId,
+          citizenId: data.citizenId,
+          status: SessionStatus.WAITING_TRASH,
+          expiresAt,
+        },
+        include: { station: true },
+      });
+    }
+
+    const mock = getMockDB();
+    const recentSessionsCount = mock.depositSessions.filter(
+      (s) => s.citizenId === data.citizenId && s.createdAt >= oneHourAgo
+    ).length;
+    if (recentSessionsCount >= 10) {
+      throw new Error("Batas setoran per jam tercapai (maks 10 setoran/jam). Coba lagi nanti.");
+    }
+
+    const session = {
+      id: `ses_${Date.now()}`,
+      sessionCode,
+      stationId: data.stationId,
+      citizenId: data.citizenId,
+      status: SessionStatus.WAITING_TRASH,
+      userCategory: null,
+      imageUrl: null,
+      eventTriggeredAt: null,
+      eventDistanceCm: null,
+      aiCategory: null,
+      aiSubCategory: null,
+      aiConfidence: null,
+      aiReason: null,
+      aiTips: null,
+      aiRawResponse: null,
+      isCorrected: false,
+      isCheatingSuspected: false,
+      retryCount: 0,
+      reviewedById: null,
+      reviewedAt: null,
+      reviewNotes: null,
+      rewardAmount: 0,
+      expiresAt,
+      createdAt: now,
+      updatedAt: now,
+    };
+    mock.depositSessions.push(session);
+    const station = mock.stations.find((s) => s.id === session.stationId) || null;
+    return { ...session, station };
+  },
+
+  async getSessionById(sessionId: string) {
+    if (await isDatabaseConnected()) {
+      return prisma.depositSession.findUnique({
+        where: { id: sessionId },
+        include: {
+          station: true,
+          citizen: true,
+          events: true,
+          ledgerEntry: true,
+        },
+      });
+    }
+    const mock = getMockDB();
+    const session = mock.depositSessions.find((s) => s.id === sessionId);
+    if (!session) return null;
+    const station = mock.stations.find((s) => s.id === session.stationId) || null;
+    const citizen = mock.users.find((u) => u.id === session.citizenId) || null;
+    const events = mock.stationEvents.filter((e) => e.sessionId === session.id);
+    const ledgerEntry = mock.ledger.find((l) => l.sessionId === session.id) || null;
+    return { ...session, station, citizen, events, ledgerEntry };
+  },
+
+  // Endpoint Event Ultrasonic (POST /api/ingest/event)
+  async recordStationEvent(data: {
+    stationId: string;
+    type?: string;
+    distanceCm?: number;
+    rawPayload?: string;
+  }) {
+    const now = new Date();
+    const DEBOUNCE_MS = 5000;
+
+    // Debounce server-side: abaikan event ganda dalam 5 detik di stasiun yang sama
+    if (await isDatabaseConnected()) {
+      const recentEvent = await prisma.stationEvent.findFirst({
+        where: {
+          stationId: data.stationId,
+          createdAt: { gte: new Date(now.getTime() - DEBOUNCE_MS) },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      if (recentEvent) {
+        return { debounced: true, event: recentEvent };
+      }
+
+      // Cari sesi aktif
+      const activeSession = await prisma.depositSession.findFirst({
+        where: {
+          stationId: data.stationId,
+          status: SessionStatus.WAITING_TRASH,
+          expiresAt: { gt: now },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      const event = await prisma.stationEvent.create({
+        data: {
+          stationId: data.stationId,
+          type: data.type || "waste_in",
+          distanceCm: data.distanceCm,
+          hasActiveSession: !!activeSession,
+          isClaimed: !!activeSession,
+          sessionId: activeSession ? activeSession.id : null,
+          rawPayload: data.rawPayload,
+        },
+      });
+
+      if (activeSession) {
+        await prisma.depositSession.update({
+          where: { id: activeSession.id },
+          data: {
+            status: SessionStatus.TRASH_DETECTED,
+            eventTriggeredAt: now,
+            eventDistanceCm: data.distanceCm,
+          },
+        });
+      }
+
+      return { debounced: false, event, sessionUpdated: !!activeSession, sessionId: activeSession?.id };
+    }
+
+    const mock = getMockDB();
+    const recent = mock.stationEvents
+      .filter((e) => e.stationId === data.stationId && now.getTime() - e.createdAt.getTime() < DEBOUNCE_MS)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+
+    if (recent) {
+      return { debounced: true, event: recent };
+    }
+
+    const activeSession = mock.depositSessions
+      .filter(
+        (s) =>
+          s.stationId === data.stationId &&
+          s.status === SessionStatus.WAITING_TRASH &&
+          s.expiresAt > now
+      )
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+
+    const event = {
+      id: `evt_${Date.now()}`,
+      stationId: data.stationId,
+      type: data.type || "waste_in",
+      distanceCm: data.distanceCm ?? null,
+      hasActiveSession: !!activeSession,
+      isClaimed: !!activeSession,
+      sessionId: activeSession ? activeSession.id : null,
+      rawPayload: data.rawPayload || null,
+      createdAt: now,
+    };
+    mock.stationEvents.push(event);
+
+    if (activeSession) {
+      activeSession.status = SessionStatus.TRASH_DETECTED;
+      activeSession.eventTriggeredAt = now;
+      activeSession.eventDistanceCm = data.distanceCm ?? null;
+      activeSession.updatedAt = now;
+    }
+
+    return { debounced: false, event, sessionUpdated: !!activeSession, sessionId: activeSession?.id };
+  },
+
+  // Verifikasi Foto AI & Reward atomic ledger
+  async processSessionAiResult(sessionId: string, params: {
+    userCategory: "ORGANIK" | "ANORGANIK";
+    imageUrl: string;
+    aiResult: {
+      kategori: "organik" | "anorganik" | "tidak_jelas";
+      subjenis: string;
+      confidence: number;
+      alasan_singkat: string;
+      tips_pemilahan: string;
+      rawResponse?: string;
+    };
+  }) {
+    const session = await this.getSessionById(sessionId);
+    if (!session) throw new Error("Sesi tidak ditemukan");
+    if (session.status !== SessionStatus.TRASH_DETECTED && session.status !== SessionStatus.WAITING_TRASH) {
+      if (session.status === SessionStatus.COMPLETED) {
+        throw new Error("Sesi ini sudah selesai dan saldo sudah dikreditkan.");
+      }
+    }
+
+    // Ambil tarif flat banjar
+    const banjarId = session.station?.banjarId || "bjr_kayumas";
+    const tariff = await this.getStationTariff(banjarId);
+
+    const { userCategory, imageUrl, aiResult } = params;
+    const userCatLower = userCategory.toLowerCase();
+    const aiCatLower = aiResult.kategori.toLowerCase();
+
+    let newStatus: SessionStatus = SessionStatus.COMPLETED;
+    let isCorrected = false;
+    let isCheatingSuspected = false;
+    let rewardAmount = 0;
+
+    // Aturan Keputusan:
+    // 1. Match + confidence >= 0.7 -> DISETUJUI
+    if (aiCatLower === userCatLower && aiResult.confidence >= 0.7) {
+      newStatus = SessionStatus.COMPLETED;
+      rewardAmount = userCatLower === "organik" ? tariff.organicRate : tariff.inorganicRate;
+    }
+    // 2. Mismatch + confidence >= 0.7 -> DIKOREKSI AI (reward sesuai kategori AI)
+    else if ((aiCatLower === "organik" || aiCatLower === "anorganik") && aiCatLower !== userCatLower && aiResult.confidence >= 0.7) {
+      newStatus = SessionStatus.COMPLETED;
+      isCorrected = true;
+      isCheatingSuspected = true;
+      rewardAmount = aiCatLower === "organik" ? tariff.organicRate : tariff.inorganicRate;
+    }
+    // 3. Confidence < 0.7 atau tidak_jelas
+    else {
+      if (session.retryCount < 2) {
+        // Izinkan user foto ulang maks 2x
+        newStatus = SessionStatus.TRASH_DETECTED; // Tetap di status untuk foto ulang
+      } else {
+        // Fallback: perlu tinjauan petugas, saldo tertahan
+        newStatus = SessionStatus.NEEDS_REVIEW;
+      }
+      rewardAmount = 0;
+    }
+
+    if (await isDatabaseConnected()) {
+      return prisma.$transaction(async (tx) => {
+        const updatedSession = await tx.depositSession.update({
+          where: { id: sessionId },
+          data: {
+            userCategory: userCategory as WasteCategory,
+            imageUrl,
+            aiCategory: aiResult.kategori,
+            aiSubCategory: aiResult.subjenis,
+            aiConfidence: aiResult.confidence,
+            aiReason: aiResult.alasan_singkat,
+            aiTips: aiResult.tips_pemilahan,
+            aiRawResponse: aiResult.rawResponse ?? null,
+            isCorrected,
+            isCheatingSuspected,
+            retryCount: aiResult.confidence < 0.7 || aiResult.kategori === "tidak_jelas" ? session.retryCount + 1 : session.retryCount,
+            status: newStatus,
+            rewardAmount,
+          },
+        });
+
+        // Jika approved / dikoreksi otomatis cairkan poin flat via PointLedger atomic
+        if (newStatus === SessionStatus.COMPLETED && rewardAmount > 0) {
+          const desc = isCorrected
+            ? `Setoran Sampah ${aiCatLower.toUpperCase()} (Koreksi AI dari ${userCategory}) - Sesi ${session.sessionCode}`
+            : `Setoran Sampah ${userCategory} - Sesi ${session.sessionCode}`;
+
+          await tx.pointLedger.create({
+            data: {
+              userId: session.citizenId,
+              amount: rewardAmount,
+              type: "DEPOSIT_SESSION",
+              description: desc,
+              sessionId: session.id,
+            },
+          });
+        }
+
+        return updatedSession;
+      });
+    }
+
+    const mock = getMockDB();
+    const mockSession = mock.depositSessions.find((s) => s.id === sessionId);
+    if (!mockSession) throw new Error("Sesi mock tidak ditemukan");
+
+    mockSession.userCategory = userCategory as WasteCategory;
+    mockSession.imageUrl = imageUrl;
+    mockSession.aiCategory = aiResult.kategori;
+    mockSession.aiSubCategory = aiResult.subjenis;
+    mockSession.aiConfidence = aiResult.confidence;
+    mockSession.aiReason = aiResult.alasan_singkat;
+    mockSession.aiTips = aiResult.tips_pemilahan;
+    mockSession.aiRawResponse = aiResult.rawResponse || null;
+    mockSession.isCorrected = isCorrected;
+    mockSession.isCheatingSuspected = isCheatingSuspected;
+    if (aiResult.confidence < 0.7 || aiResult.kategori === "tidak_jelas") {
+      mockSession.retryCount += 1;
+    }
+    mockSession.status = newStatus;
+    mockSession.rewardAmount = rewardAmount;
+    mockSession.updatedAt = new Date();
+
+    if (newStatus === SessionStatus.COMPLETED && rewardAmount > 0) {
+      const desc = isCorrected
+        ? `Setoran Sampah ${aiCatLower.toUpperCase()} (Koreksi AI dari ${userCategory}) - Sesi ${session.sessionCode}`
+        : `Setoran Sampah ${userCategory} - Sesi ${session.sessionCode}`;
+
+      mock.ledger.push({
+        id: `led_${Date.now()}`,
+        userId: session.citizenId,
+        amount: rewardAmount,
+        type: "DEPOSIT_SESSION",
+        description: desc,
+        sessionId: session.id,
+        depositId: null,
+        withdrawalId: null,
+        createdAt: new Date(),
+      });
+    }
+
+    return mockSession;
+  },
+
+  // Antrean tinjauan petugas (NEEDS_REVIEW)
+  async getPendingReviewSessions(banjarId?: string) {
+    if (await isDatabaseConnected()) {
+      return prisma.depositSession.findMany({
+        where: {
+          status: SessionStatus.NEEDS_REVIEW,
+          ...(banjarId ? { station: { banjarId } } : {}),
+        },
+        include: {
+          citizen: true,
+          station: true,
+        },
+        orderBy: { createdAt: "desc" },
+      });
+    }
+    const mock = getMockDB();
+    return mock.depositSessions
+      .filter((s) => s.status === SessionStatus.NEEDS_REVIEW)
+      .map((s) => {
+        const citizen = mock.users.find((u) => u.id === s.citizenId) || null;
+        const station = mock.stations.find((st) => st.id === s.stationId) || null;
+        return { ...s, citizen, station };
+      })
+      .filter((s) => !banjarId || s.station?.banjarId === banjarId);
+  },
+
+  // Persetujuan atau koreksi manual oleh petugas
+  async officerReviewSession(sessionId: string, params: {
+    officerId: string;
+    decision: "APPROVE_AS_IS" | "CORRECT_CATEGORY" | "REJECT";
+    finalCategory?: "ORGANIK" | "ANORGANIK";
+    notes?: string;
+  }) {
+    const session = await this.getSessionById(sessionId);
+    if (!session) throw new Error("Sesi tidak ditemukan");
+    if (session.status !== SessionStatus.NEEDS_REVIEW) {
+      throw new Error("Sesi tidak sedang dalam status menunggu tinjauan.");
+    }
+
+    const banjarId = session.station?.banjarId || "bjr_kayumas";
+    const tariff = await this.getStationTariff(banjarId);
+    let rewardAmount = 0;
+    let finalStatus: SessionStatus = SessionStatus.COMPLETED;
+    let chosenCategory = session.userCategory || WasteCategory.ANORGANIK;
+
+    if (params.decision === "REJECT") {
+      finalStatus = SessionStatus.REJECTED;
+      rewardAmount = 0;
+    } else if (params.decision === "CORRECT_CATEGORY" && params.finalCategory) {
+      finalStatus = SessionStatus.COMPLETED;
+      chosenCategory = params.finalCategory as WasteCategory;
+      rewardAmount = params.finalCategory === "ORGANIK" ? tariff.organicRate : tariff.inorganicRate;
+    } else {
+      // APPROVE_AS_IS
+      finalStatus = SessionStatus.COMPLETED;
+      rewardAmount = session.userCategory === "ORGANIK" ? tariff.organicRate : tariff.inorganicRate;
+    }
+
+    const now = new Date();
+
+    if (await isDatabaseConnected()) {
+      return prisma.$transaction(async (tx) => {
+        const updated = await tx.depositSession.update({
+          where: { id: sessionId },
+          data: {
+            status: finalStatus,
+            rewardAmount,
+            userCategory: chosenCategory,
+            reviewedById: params.officerId,
+            reviewedAt: now,
+            reviewNotes: params.notes || `Keputusan petugas: ${params.decision}`,
+            isCorrected: params.decision === "CORRECT_CATEGORY",
+          },
+        });
+
+        if (finalStatus === SessionStatus.COMPLETED && rewardAmount > 0) {
+          await tx.pointLedger.create({
+            data: {
+              userId: session.citizenId,
+              amount: rewardAmount,
+              type: "DEPOSIT_SESSION",
+              description: `Persetujuan Petugas: Setoran ${chosenCategory} (Sesi ${session.sessionCode})`,
+              sessionId: session.id,
+            },
+          });
+        }
+        return updated;
+      });
+    }
+
+    const mock = getMockDB();
+    const s = mock.depositSessions.find((item) => item.id === sessionId);
+    if (!s) throw new Error("Mock session not found");
+
+    s.status = finalStatus;
+    s.rewardAmount = rewardAmount;
+    s.userCategory = chosenCategory;
+    s.reviewedById = params.officerId;
+    s.reviewedAt = now;
+    s.reviewNotes = params.notes || `Keputusan petugas: ${params.decision}`;
+    s.isCorrected = params.decision === "CORRECT_CATEGORY";
+    s.updatedAt = now;
+
+    if (finalStatus === SessionStatus.COMPLETED && rewardAmount > 0) {
+      mock.ledger.push({
+        id: `led_${Date.now()}`,
+        userId: session.citizenId,
+        amount: rewardAmount,
+        type: "DEPOSIT_SESSION",
+        description: `Persetujuan Petugas: Setoran ${chosenCategory} (Sesi ${session.sessionCode})`,
+        sessionId: session.id,
+        depositId: null,
+        withdrawalId: null,
+        createdAt: now,
+      });
+    }
+    return s;
+  },
+
+  // Riwayat sesi untuk profil Warga
+  async getCitizenSessions(citizenId: string, limit = 20) {
+    if (await isDatabaseConnected()) {
+      return prisma.depositSession.findMany({
+        where: { citizenId },
+        include: { station: true },
+        orderBy: { createdAt: "desc" },
+        take: limit,
+      });
+    }
+    const mock = getMockDB();
+    return mock.depositSessions
+      .filter((s) => s.citizenId === citizenId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit)
+      .map((s) => {
+        const station = mock.stations.find((st) => st.id === s.stationId) || null;
+        return { ...s, station };
+      });
   },
 
   // --- BANK SAMPAH / TRANSACTIONS ---
@@ -372,37 +1056,6 @@ export const dbService = {
     };
     mock.wasteTypes.push(wt);
     return wt;
-  },
-
-  async getCitizens(banjarId: string) {
-    if (await isDatabaseConnected()) {
-      const users = await prisma.user.findMany({
-        where: { banjarId, role: Role.WARGA },
-        select: { id: true, name: true, email: true, phone: true },
-      });
-      return users.map((u) => ({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        phone: u.phone,
-        saldoRupiah: 0,
-      }));
-    }
-    const mock = getMockDB();
-    return mock.users
-      .filter((u) => u.banjarId === banjarId && u.role === Role.WARGA)
-      .map((u) => {
-        const balance = mock.ledger
-          .filter((l) => l.userId === u.id)
-          .reduce((acc, l) => acc + (l.type === "CREDIT" ? l.amount : -l.amount), 0);
-        return {
-          id: u.id,
-          name: u.name,
-          email: u.email,
-          phone: u.phone,
-          saldoRupiah: balance,
-        };
-      });
   },
 
   async recordDeposit(data: {
@@ -467,9 +1120,41 @@ export const dbService = {
       description: `Setoran ${data.weightKg} kg sampah terpilah`,
       depositId: deposit.id,
       withdrawalId: null,
+      sessionId: null,
       createdAt: new Date(),
     });
     return deposit;
+  },
+
+  async getCitizens(banjarId: string) {
+    if (await isDatabaseConnected()) {
+      const users = await prisma.user.findMany({
+        where: { banjarId, role: Role.WARGA },
+        select: { id: true, name: true, email: true, phone: true },
+      });
+      return users.map((u) => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+        saldoRupiah: 0,
+      }));
+    }
+    const mock = getMockDB();
+    return mock.users
+      .filter((u) => u.banjarId === banjarId && u.role === Role.WARGA)
+      .map((u) => {
+        const balance = mock.ledger
+          .filter((l) => l.userId === u.id)
+          .reduce((acc, l) => acc + l.amount, 0);
+        return {
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          phone: u.phone,
+          saldoRupiah: balance,
+        };
+      });
   },
 
   async getUserBalance(userId: string): Promise<number> {
@@ -492,7 +1177,7 @@ export const dbService = {
         where: { userId },
         orderBy: { createdAt: "desc" },
         include: {
-          deposit: { include: { wasteType: true } },
+          depositSession: { include: { station: true } },
           withdrawal: true,
         },
       });
@@ -502,12 +1187,12 @@ export const dbService = {
       .filter((l) => l.userId === userId)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .map((l) => {
-        const deposit = mock.deposits.find((d) => d.id === l.depositId);
-        const wasteType = deposit ? mock.wasteTypes.find((w) => w.id === deposit.wasteTypeId) : null;
+        const depositSession = l.sessionId ? mock.depositSessions.find((s) => s.id === l.sessionId) : null;
+        const station = depositSession ? mock.stations.find((st) => st.id === depositSession.stationId) : null;
         const withdrawal = mock.withdrawals.find((w) => w.id === l.withdrawalId);
         return {
           ...l,
-          deposit: deposit ? { ...deposit, wasteType } : null,
+          depositSession: depositSession ? { ...depositSession, station } : null,
           withdrawal: withdrawal || null,
         };
       });
@@ -584,28 +1269,43 @@ export const dbService = {
       description: `Pencairan saldo Rp${wdr.amount.toLocaleString("id-ID")}`,
       depositId: null,
       withdrawalId: wdr.id,
+      sessionId: null,
       createdAt: new Date(),
     });
     return wdr;
   },
 
-  async getBanjarReport(banjarId: string) {
-    // Aggregation of total deposits, total kg, breakdown per waste type
+  async getPendingWithdrawals(banjarId?: string) {
     if (await isDatabaseConnected()) {
-      const deposits = await prisma.deposit.findMany({
-        where: { citizen: { banjarId } },
-        include: { wasteType: true },
+      return prisma.withdrawal.findMany({
+        where: {
+          status: "PENDING",
+          ...(banjarId ? { user: { banjarId } } : {}),
+        },
+        include: { user: true },
         orderBy: { createdAt: "desc" },
       });
-      return deposits;
     }
     const mock = getMockDB();
-    const citizenIds = new Set(mock.users.filter((u) => u.banjarId === banjarId).map((u) => u.id));
-    return mock.deposits
-      .filter((d) => citizenIds.has(d.citizenId))
-      .map((d) => ({
-        ...d,
-        wasteType: mock.wasteTypes.find((w) => w.id === d.wasteTypeId) || null,
-      }));
+    return mock.withdrawals
+      .filter((w) => w.status === "PENDING")
+      .map((w) => {
+        const user = mock.users.find((u) => u.id === w.userId) || null;
+        return { ...w, user };
+      })
+      .filter((w) => !banjarId || w.user?.banjarId === banjarId);
+  },
+
+  async getBanjarReport(banjarId: string) {
+    if (await isDatabaseConnected()) {
+      const sessions = await prisma.depositSession.findMany({
+        where: { station: { banjarId } },
+        orderBy: { createdAt: "desc" },
+      });
+      return sessions;
+    }
+    const mock = getMockDB();
+    const stationIds = new Set(mock.stations.filter((s) => s.banjarId === banjarId).map((s) => s.id));
+    return mock.depositSessions.filter((s) => stationIds.has(s.stationId));
   },
 };

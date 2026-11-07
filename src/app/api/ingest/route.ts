@@ -8,6 +8,7 @@ const IngestSchema = z.object({
   temp: z.number(),
   smoke: z.number(),
   humidity: z.number().optional(),
+  fill_level: z.number().min(0).max(100).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid payload format", details: parsed.error }, { status: 400 });
     }
 
-    const { device_id, temp, smoke, humidity } = parsed.data;
+    const { device_id, temp, smoke, humidity, fill_level } = parsed.data;
 
     // Simpan reading ke database
     const reading = await dbService.saveReading({
@@ -36,9 +37,25 @@ export async function POST(req: NextRequest) {
       temp,
       smoke,
       humidity,
+      fillLevel: fill_level,
     });
 
-    // Evaluasi ambang batas
+    // Update fill level & trigger alert jika tong hampir penuh (>= 80%)
+    let fillAlertTriggered = false;
+    if (fill_level !== undefined) {
+      const fillResult = await dbService.updateStationFillLevel(station.id, fill_level);
+      fillAlertTriggered = !!fillResult?.alertCreated;
+      if (fillAlertTriggered) {
+        await sendTelegramAlert(
+          `⚠️ *TONG HAMPIR PENUH: STASIUN ${station.name} (${device_id})*\n` +
+          `• Kapasitas isi: *${fill_level.toFixed(1)}%*\n` +
+          `• Lokasi: ${station.lokasi}\n` +
+          `_Harap jadwalkan pengangkutan truk DLH / pos penjemputan._`
+        );
+      }
+    }
+
+    // Evaluasi ambang batas kebakaran
     let alertCreated = null;
     const isTempDanger = temp >= station.tempDangerThreshold;
     const isTempWarn = temp >= station.tempWarnThreshold;
@@ -72,12 +89,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      stationId: station.id,
       readingId: reading.id,
-      alert: alertCreated ? { level: alertCreated.level, type: alertCreated.type } : null,
+      alertCreated: alertCreated !== null || fillAlertTriggered,
+      alert: alertCreated,
+      fillAlert: fillAlertTriggered,
     });
-  } catch (err: any) {
-    console.error("Ingest error:", err);
-    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

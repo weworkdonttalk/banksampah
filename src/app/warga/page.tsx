@@ -4,235 +4,323 @@ import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import PearCanvas from "@/components/webgl/pear-canvas";
 import ChatbotWidget from "@/components/warga/chatbot-widget";
-import { generateDeposit, generateWallet, DepositRecord, UserWallet } from "@/lib/mock-telemetry";
-import { playSuccessChime } from "@/lib/audio-alert";
+import { playSuccessChime, playSirenSound } from "@/lib/audio-alert";
 import { compressImage, CompressedImageResult } from "@/lib/image-compress";
-import { queueOfflineDeposit, getQueuedDeposits, QueuedDeposit } from "@/lib/offline-queue";
 import {
   Camera,
-  PlusCircle,
-  Coins,
-  Wifi,
-  WifiOff,
   Ticket,
   Clock,
   X,
-  ChevronRight,
   ShieldCheck,
   Sparkles,
+  Radio,
+  RotateCcw,
+  AlertCircle,
+  CheckCircle2,
 } from "lucide-react";
 
-const MATERIAL_RATES = [
-  { id: "PET", name: "Botol Plastik PET", ratePerKg: 4500, pointsPerKg: 450, co2PerKg: 1.8, category: "Anorganik" },
-  { id: "HDPE", name: "Tutup & Botol Tebal", ratePerKg: 3800, pointsPerKg: 380, co2PerKg: 1.5, category: "Anorganik" },
-  { id: "METAL", name: "Kaleng Minuman & Logam", ratePerKg: 9500, pointsPerKg: 950, co2PerKg: 3.2, category: "Anorganik" },
-  { id: "KARDUS", name: "Kardus & Kertas Dupleks", ratePerKg: 2200, pointsPerKg: 220, co2PerKg: 0.9, category: "Anorganik" },
-  { id: "ORGANIK", name: "Canang & Limbah Upakara", ratePerKg: 1200, pointsPerKg: 120, co2PerKg: 0.4, category: "Organik" },
+interface StationItem {
+  id: string;
+  deviceId: string;
+  name: string;
+  lokasi: string;
+}
+
+interface ActiveSessionData {
+  id: string;
+  sessionCode: string;
+  stationId: string;
+  status: "WAITING_TRASH" | "TRASH_DETECTED" | "COMPLETED" | "NEEDS_REVIEW" | "REJECTED" | "EXPIRED";
+  expiresAt: string;
+  eventTriggeredAt?: string | null;
+  rewardAmount?: number;
+  userCategory?: string | null;
+  aiCategory?: string | null;
+  aiConfidence?: number | null;
+  aiReason?: string | null;
+  aiTips?: string | null;
+  isCorrected?: boolean;
+}
+
+interface CitizenSessionHistory {
+  id: string;
+  sessionCode: string;
+  status: string;
+  rewardAmount: number;
+  userCategory: string | null;
+  aiCategory: string | null;
+  imageUrl: string | null;
+  aiConfidence: number | null;
+  aiReason: string | null;
+  createdAt: string;
+  isCorrected: boolean;
+}
+
+const STATIONS: StationItem[] = [
+  { id: "st_001", deviceId: "ST-001", name: "Stasiun TPST Terpadu Kayumas", lokasi: "Banjar Kayumas Kaja" },
+  { id: "st_002", deviceId: "ST-002", name: "Stasiun TPS Seminyak Coastal", lokasi: "Depot Seminyak" },
 ];
 
 const VOUCHERS = [
-  { id: "V-PLN-20K", title: "Token Listrik PLN Rp 20.000", costPoints: 2000, category: "Listrik", issuer: "PLN Distribusi Bali" },
-  { id: "V-PLS-10K", title: "Pulsa Telkomsel Rp 10.000", costPoints: 1000, category: "Pulsa", issuer: "Telkomsel" },
-  { id: "V-SEMBAKO", title: "Voucher Beras Banjar 2.5 kg", costPoints: 3500, category: "Pangan", issuer: "Koperasi Banjar Kayumas" },
-  { id: "V-PDAM", title: "Iuran Air / Banjar Adat", costPoints: 1500, category: "Iuran", issuer: "LPD Adat Kayumas" },
+  { id: "V-PLN-20K", title: "Token Listrik PLN Rp 20.000", costPoints: 20000, category: "Listrik", issuer: "PLN Distribusi Bali" },
+  { id: "V-PLS-10K", title: "Pulsa Seluler Rp 10.000", costPoints: 10000, category: "Pulsa", issuer: "Telkomsel" },
+  { id: "V-SEMBAKO", title: "Beras Banjar Sejahtera 2.5 kg", costPoints: 35000, category: "Pangan", issuer: "Koperasi Banjar Kayumas" },
+  { id: "V-PDAM", title: "Iuran Air Swakelola Banjar", costPoints: 15000, category: "Iuran", issuer: "LPD Adat Kayumas" },
 ];
 
 export default function CircularExchangePage() {
-  const [wallet, setWallet] = useState<UserWallet>({
-    userId: "WGR-DPS-8841",
-    name: "I Wayan Sudiarta",
-    totalPoints: 4850,
-    totalCo2SavedKg: 18.4,
-    totalDeposits: 32,
-  });
+  const [balance, setBalance] = useState<number>(45000);
+  const [tariff, setTariff] = useState({ organicRate: 2000, inorganicRate: 3000 });
+  const [history, setHistory] = useState<CitizenSessionHistory[]>([]);
 
-  const [history, setHistory] = useState<DepositRecord[]>([]);
-  const [offlineQueue, setOfflineQueue] = useState<QueuedDeposit[]>([]);
-  const [isOnline, setIsOnline] = useState(true);
+  // Sesi Setor IoT
+  const [selectedStationId, setSelectedStationId] = useState<string>(STATIONS[0].id);
+  const [activeSession, setActiveSession] = useState<ActiveSessionData | null>(null);
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
+  const [sessionTimer, setSessionTimer] = useState<string>("05:00");
 
-  const [drawerMode, setDrawerMode] = useState<"NONE" | "DEPOSIT" | "CAMERA" | "REDEEM">("NONE");
-  const [selectedMaterial, setSelectedMaterial] = useState(MATERIAL_RATES[0]);
-  const [materialFilter, setMaterialFilter] = useState<string>("SEMUA");
-  const [historyFilter, setHistoryFilter] = useState<string>("SEMUA");
-  const [weightInput, setWeightInput] = useState<string>("1250");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [successToast, setSuccessToast] = useState<string | null>(null);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isCompressing, setIsCompressing] = useState(false);
+  // Drawer & Foto
+  const [drawerMode, setDrawerMode] = useState<"NONE" | "DEPOSIT_FLOW" | "CAMERA" | "REDEEM">("NONE");
+  const [selectedCategory, setSelectedCategory] = useState<"ORGANIK" | "ANORGANIK">("ORGANIK");
   const [compressedResult, setCompressedResult] = useState<CompressedImageResult | null>(null);
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [isVerifyingAi, setIsVerifyingAi] = useState(false);
+  const [successToast, setSuccessToast] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   const [selectedVoucher, setSelectedVoucher] = useState<(typeof VOUCHERS)[0] | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    setWallet(generateWallet());
-    setHistory([
-      generateDeposit("WGR-DPS-8841"),
-      generateDeposit("WGR-DPS-8841"),
-      generateDeposit("WGR-DPS-8841"),
-    ]);
-
-    setIsOnline(navigator.onLine);
-    getQueuedDeposits().then((items) => setOfflineQueue(items));
-
-    const handleOnline = () => {
-      setIsOnline(true);
-      getQueuedDeposits().then((queued) => {
-        if (queued.length > 0) {
-          setSuccessToast(`Menyinkronkan ${queued.length} setoran tersimpan lokal.`);
-          setTimeout(() => setSuccessToast(null), 4000);
-        }
-      });
-    };
-
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
-
-  const parsedWeight = Math.max(50, Number(weightInput) || 0);
-  const weightKg = Number((parsedWeight / 1000).toFixed(2));
-  const calcPoints = Math.round(weightKg * selectedMaterial.pointsPerKg);
-  const calcRupiah = Math.round(weightKg * selectedMaterial.ratePerKg);
-  const calcCo2 = Number((weightKg * selectedMaterial.co2PerKg).toFixed(2));
-
-  const handleAdjustWeight = (deltaGrams: number) => {
-    const cur = Number(weightInput) || 0;
-    const next = Math.max(100, Math.min(25000, cur + deltaGrams));
-    setWeightInput(String(next));
+  // Load initial data
+  const loadCitizenData = async () => {
+    try {
+      const res = await fetch("/api/citizen/sessions");
+      if (res.ok) {
+        const data = await res.json();
+        if (typeof data.balance === "number") setBalance(data.balance);
+        if (data.tariff) setTariff(data.tariff);
+        if (data.sessions) setHistory(data.sessions);
+      }
+    } catch {
+      // Offline fallback
+    }
   };
 
+  useEffect(() => {
+    loadCitizenData();
+  }, []);
+
+  // Polling sesi aktif (2.5 detik) jika sesi sedang menunggu atau terdeteksi
+  useEffect(() => {
+    if (!activeSession) return;
+    if (activeSession.status === "COMPLETED" || activeSession.status === "REJECTED" || activeSession.status === "EXPIRED") return;
+
+    let isSubscribed = true;
+    const interval = setInterval(async () => {
+      if (document.hidden) return; // Hentikan polling jika tab tidak aktif
+      try {
+        const res = await fetch(`/api/sessions/${activeSession.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.session && isSubscribed) {
+            setActiveSession(data.session);
+            if (data.session.status === "TRASH_DETECTED" && activeSession.status === "WAITING_TRASH") {
+              playSuccessChime();
+              setSuccessToast("Sensor ultrasonik mendeteksi sampah masuk! Silakan ambil foto sampah Anda.");
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }, 2500);
+
+    return () => {
+      isSubscribed = false;
+      clearInterval(interval);
+    };
+  }, [activeSession]);
+
+  // Hitung mundur sisa waktu sesi 5 menit
+  useEffect(() => {
+    if (!activeSession?.expiresAt) return;
+    const updateCountdown = () => {
+      const remainingMs = new Date(activeSession.expiresAt).getTime() - Date.now();
+      if (remainingMs <= 0) {
+        setSessionTimer("00:00");
+        setActiveSession((prev) => (prev ? { ...prev, status: "EXPIRED" } : null));
+        return;
+      }
+      const mins = Math.floor(remainingMs / 60000);
+      const secs = Math.floor((remainingMs % 60000) / 1000);
+      setSessionTimer(`${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`);
+    };
+
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 1000);
+    return () => clearInterval(timer);
+  }, [activeSession?.expiresAt]);
+
+  // Memulai Sesi Setor
+  const handleStartSession = async (stationId = selectedStationId) => {
+    setIsCreatingSession(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch("/api/sessions/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stationId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal membuat sesi setor");
+
+      setActiveSession(data.session);
+      setDrawerMode("DEPOSIT_FLOW");
+      playSuccessChime();
+      setSuccessToast(`Sesi ${data.session.sessionCode} aktif! Silakan masukkan sampah ke stasiun.`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Terjadi kesalahan";
+      setErrorMessage(msg);
+      playSirenSound();
+    } finally {
+      setIsCreatingSession(false);
+    }
+  };
+
+  // Trigger Hardware Simulator (Simulasi sensor ultrasonic mendeteksi sampah)
+  const handleSimulateUltrasonic = async () => {
+    const curStation = STATIONS.find((s) => s.id === (activeSession?.stationId || selectedStationId)) || STATIONS[0];
+    try {
+      const res = await fetch("/api/simulator", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deviceId: curStation.deviceId,
+          action: "waste_in",
+          distanceCm: 13.5,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        playSuccessChime();
+        setSuccessToast("Simulasi sensor ultrasonik: Sampah berhasil terdeteksi!");
+        if (activeSession) {
+          setActiveSession((prev) => (prev ? { ...prev, status: "TRASH_DETECTED" } : null));
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  // Tangkap & Kompres Foto Kamera HP
   const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsCompressing(true);
-    setDrawerMode("CAMERA");
-
     try {
       const result = await compressImage(file);
       setCompressedResult(result);
-      const matched = MATERIAL_RATES.find((m) => m.id === result.predictedCategory);
-      if (matched) setSelectedMaterial(matched);
+      // Auto-tebak kategori dari signature kompresi
+      if (result.predictedCategory === "ORGANIK") {
+        setSelectedCategory("ORGANIK");
+      } else {
+        setSelectedCategory("ANORGANIK");
+      }
       playSuccessChime();
     } catch {
-      alert("Gagal memproses gambar kamera. Harap coba lagi.");
-      setDrawerMode("NONE");
+      alert("Gagal membaca kamera. Silakan coba lagi.");
     } finally {
       setIsCompressing(false);
     }
   };
 
-  // 1-Click Interactive Simulator for Desktop Testing without camera
-  const handleSimulateVision = (catId: string) => {
-    setIsCompressing(true);
-    setDrawerMode("CAMERA");
-    setTimeout(() => {
-      const matched = MATERIAL_RATES.find((m) => m.id === catId) || MATERIAL_RATES[0];
-      setSelectedMaterial(matched);
-      setCompressedResult({
-        dataUrl: "/samples/sample-pet.png",
-        originalSizeKb: 1420,
-        compressedSizeKb: 86,
-        width: 800,
-        height: 600,
-        compressionRatio: 94,
-        predictedCategory: (matched.id === "METAL" ? "LOGAM" : matched.id) as
-          | "PET"
-          | "ORGANIK"
-          | "KARDUS"
-          | "HDPE"
-          | "LOGAM",
-        predictedConfidence: 96,
-      });
-      setIsCompressing(false);
-      playSuccessChime();
-    }, 450);
+  // Uji Coba Cepat Preset Foto
+  const handleQuickPreset = (category: "ORGANIK" | "ANORGANIK", sampleUrl: string) => {
+    setSelectedCategory(category);
+    setCompressedResult({
+      dataUrl: sampleUrl,
+      originalSizeKb: 1420,
+      compressedSizeKb: 84,
+      width: 800,
+      height: 600,
+      compressionRatio: 94,
+      predictedCategory: category === "ORGANIK" ? "ORGANIK" : "PET",
+      predictedConfidence: 96,
+    });
+    playSuccessChime();
   };
 
-  const handleSubmitDeposit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (parsedWeight <= 0) return;
-
-    setIsSubmitting(true);
-    const timestamp = new Date();
-    const newRecord: DepositRecord = {
-      id: "TRX-" + timestamp.getTime(),
-      userId: wallet.userId,
-      userName: wallet.name,
-      wasteType: selectedMaterial.category === "Organik" ? "ORGANIC" : "INORGANIC",
-      weightGram: parsedWeight,
-      pointsEarned: calcPoints,
-      co2SavedKg: calcCo2,
-      createdAt: timestamp.toISOString(),
-    };
-
-    if (!isOnline) {
-      const queuedItem: QueuedDeposit = {
-        ...newRecord,
-        materialName: selectedMaterial.name,
-        status: "PENDING_SYNC",
-      };
-      await queueOfflineDeposit(queuedItem);
-      const updatedQueue = await getQueuedDeposits();
-      setOfflineQueue(updatedQueue);
-      setSuccessToast(`Mode Offline: ${updatedQueue.length} setoran tersimpan di memori ponsel.`);
-    } else {
-      setWallet((prev) => ({
-        ...prev,
-        totalPoints: prev.totalPoints + calcPoints,
-        totalCo2SavedKg: Number((prev.totalCo2SavedKg + calcCo2).toFixed(2)),
-        totalDeposits: prev.totalDeposits + 1,
-      }));
-      setHistory((prev) => [newRecord, ...prev]);
-      setSuccessToast(`Setoran Berhasil: +${calcPoints} poin (Rp ${calcRupiah.toLocaleString("id-ID")})`);
+  // Submit Foto & Verifikasi AI Vision ke Server
+  const handleSubmitVerification = async () => {
+    if (!activeSession) return;
+    if (!compressedResult) {
+      alert("Harap ambil foto sampah terlebih dahulu");
+      return;
     }
 
-    playSuccessChime();
-    setIsSubmitting(false);
-    setDrawerMode("NONE");
-    setCompressedResult(null);
-    setTimeout(() => setSuccessToast(null), 4500);
+    setIsVerifyingAi(true);
+    setErrorMessage(null);
+
+    try {
+      const res = await fetch(`/api/sessions/${activeSession.id}/submit-photo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userCategory: selectedCategory,
+          imageBase64: compressedResult.dataUrl,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal memproses verifikasi");
+
+      playSuccessChime();
+      setActiveSession(data.session);
+      setSuccessToast(data.message);
+      loadCitizenData();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Terjadi kesalahan";
+      setErrorMessage(msg);
+    } finally {
+      setIsVerifyingAi(false);
+    }
   };
 
+  // Penukaran Saldo / Voucher
   const handleRedeemVoucher = (voucher: (typeof VOUCHERS)[0]) => {
-    if (wallet.totalPoints < voucher.costPoints) {
-      alert("Saldo poin Anda belum mencukupi untuk voucher ini.");
+    if (balance < voucher.costPoints) {
+      alert("Saldo kas Anda belum mencukupi untuk penukaran voucher ini.");
       return;
     }
     setSelectedVoucher(voucher);
     setDrawerMode("REDEEM");
   };
 
-  const confirmRedeem = () => {
+  const confirmRedeem = async () => {
     if (!selectedVoucher) return;
-    setWallet((prev) => ({
-      ...prev,
-      totalPoints: prev.totalPoints - selectedVoucher.costPoints,
-    }));
-    playSuccessChime();
-    setDrawerMode("NONE");
-    setSuccessToast(`Berhasil menukar ${selectedVoucher.title}! SMS kode voucher telah dikirim.`);
-    setSelectedVoucher(null);
-    setTimeout(() => setSuccessToast(null), 4500);
+    try {
+      const res = await fetch("/api/withdrawals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: selectedVoucher.costPoints,
+          notes: `Penukaran ${selectedVoucher.title}`,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal mengajukan penukaran");
+
+      playSuccessChime();
+      setSuccessToast(`Pengajuan penukaran ${selectedVoucher.title} berhasil diajukan ke petugas.`);
+      setDrawerMode("NONE");
+      setSelectedVoucher(null);
+      loadCitizenData();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Gagal mengajukan penukaran");
+    }
   };
-
-  const filteredMaterials =
-    materialFilter === "SEMUA"
-      ? MATERIAL_RATES
-      : MATERIAL_RATES.filter((m) => m.category === materialFilter);
-
-  const filteredHistory =
-    historyFilter === "SEMUA"
-      ? history
-      : historyFilter === "ORGANIK"
-      ? history.filter((h) => h.wasteType === "ORGANIC")
-      : history.filter((h) => h.wasteType === "INORGANIC");
 
   return (
     <div className="relative min-h-screen bg-[#f2f1ed] text-[#1d1c19] selection:bg-[#1d1c19] selection:text-[#f2f1ed]">
@@ -254,13 +342,24 @@ export default function CircularExchangePage() {
       {successToast && (
         <aside
           role="status"
-          className="sticky top-0 inset-x-0 z-40 bg-[#015186] text-white py-2.5 px-4 sm:px-6 lg:px-8 text-xs font-gt-mono font-bold text-center shadow-md animate-fade-in"
+          className="sticky top-0 inset-x-0 z-40 bg-[#015186] text-white py-2.5 px-4 sm:px-6 lg:px-8 text-xs font-gt-mono font-bold text-center shadow-md animate-fade-in flex items-center justify-center gap-2"
         >
-          {successToast}
+          <CheckCircle2 className="size-4 shrink-0" />
+          <span>{successToast}</span>
         </aside>
       )}
 
-      {/* HIDDEN CAMERA INPUT */}
+      {errorMessage && (
+        <aside
+          role="alert"
+          className="sticky top-0 inset-x-0 z-40 bg-[#b91c1c] text-white py-2.5 px-4 sm:px-6 lg:px-8 text-xs font-gt-mono font-bold text-center shadow-md animate-fade-in flex items-center justify-center gap-2"
+        >
+          <AlertCircle className="size-4 shrink-0" />
+          <span>{errorMessage}</span>
+        </aside>
+      )}
+
+      {/* HIDDEN CAMERA INPUT (capture=environment untuk kamera belakang HP) */}
       <input
         ref={fileInputRef}
         type="file"
@@ -278,83 +377,70 @@ export default function CircularExchangePage() {
           <div>
             <div className="flex items-center gap-2 font-gt-mono text-[11px] text-[#015186] font-semibold uppercase tracking-wider mb-1">
               <span className="size-2 rounded-full bg-[#1d1c19]" />
-              <span>DOMPET DIGITAL WARGA // BANJAR KAYUMAS KAJA</span>
+              <span>BANK SAMPAH IOT // BANJAR KAYUMAS KAJA</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#1d1c19]">
-              Bursa Poin &amp; Tabungan Sampah
+              Setor Sampah Cerdas &amp; Verifikasi AI
             </h1>
           </div>
 
-          <div className="flex items-center gap-3 font-gt-mono text-xs">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 border border-[#1d1c19]/15 bg-[#fbfbfa]">
-              {isOnline ? (
-                <>
-                  <Wifi className="size-3.5 text-emerald-600" />
-                  <span className="text-emerald-900 font-semibold text-[11px]">Online Sync</span>
-                </>
-              ) : (
-                <>
-                  <WifiOff className="size-3.5 text-amber-600 animate-pulse" />
-                  <span className="text-amber-900 font-semibold text-[11px]">
-                    Offline ({offlineQueue.length})
-                  </span>
-                </>
-              )}
-            </div>
-
+          <div className="flex flex-wrap items-center gap-3 font-gt-mono text-xs">
             <button
-              onClick={() => setDrawerMode("DEPOSIT")}
+              onClick={() => handleStartSession()}
+              disabled={isCreatingSession}
               className="border border-[#1d1c19] bg-[#1d1c19] text-[#f2f1ed] px-4 py-2 uppercase text-[11px] font-bold tracking-wider hover:bg-black transition cursor-pointer flex items-center gap-1.5 shadow-xs active:scale-95"
             >
-              <PlusCircle className="size-3.5" />
-              <span>Input Setoran</span>
+              <Camera className="size-3.5" />
+              <span>{isCreatingSession ? "Menyiapkan Sesi..." : "Mulai Setor Baru"}</span>
             </button>
           </div>
         </header>
 
         {/* 12-COLUMN LAYOUT */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* ----- KOLOM KIRI (5/12 NASABAH & ASISTEN) ----- */}
+          {/* ----- KOLOM KIRI (5/12 NASABAH & STATUS SESI IOT) ----- */}
           <div className="lg:col-span-5 space-y-6">
-            {/* MEMBER PASS CARD */}
+            {/* CARD 1: MEMBER PASS & SALDO */}
             <div className="bg-[#1d1c19] text-[#f2f1ed] border border-[#1d1c19] p-6 shadow-sm space-y-6">
               <div className="flex items-center justify-between border-b border-white/15 pb-4 font-gt-mono text-xs">
                 <span className="text-[#84827a] tracking-widest uppercase text-[10px]">
-                  KARTU DIGITAL NASABAH
+                  KARTU DIGITAL WARGA
                 </span>
                 <span className="flex items-center gap-1 text-emerald-400 text-[10px] tracking-wider font-bold">
                   <ShieldCheck className="size-3.5" />
-                  <span>TERVERIFIKASI</span>
+                  <span>TERHUBUNG IOT</span>
                 </span>
               </div>
 
               <div>
-                <span className="text-[11px] font-gt-mono text-[#84827a] block">Nama Nasabah:</span>
-                <h2 className="text-2xl font-bold tracking-tight text-[#f2f1ed]">{wallet.name}</h2>
+                <span className="text-[11px] font-gt-mono text-[#84827a] block">Nama Warga:</span>
+                <h2 className="text-2xl font-bold tracking-tight text-[#f2f1ed]">I Wayan Sudiarta</h2>
                 <span className="font-gt-mono text-xs text-[#84827a] mt-0.5 block">
-                  ID: {wallet.userId} &bull; Banjar Kayumas Kaja
+                  Banjar Kayumas Kaja &bull; Denpasar Timur
                 </span>
               </div>
 
-              {/* POINTS & EQUIVALENT RUPIAH */}
+              {/* SALDO FLAT & TARIF BANJAR */}
               <div className="grid grid-cols-2 gap-3 pt-2 font-gt-mono border-t border-white/10">
                 <div className="bg-white/5 border border-white/10 p-3.5">
-                  <span className="text-[10px] text-[#84827a] uppercase block">Saldo Poin</span>
+                  <span className="text-[10px] text-[#84827a] uppercase block">Saldo Terkumpul</span>
                   <p className="text-2xl sm:text-3xl font-bold text-white mt-0.5">
-                    {wallet.totalPoints.toLocaleString("id-ID")}
+                    Rp {balance.toLocaleString("id-ID")}
                   </p>
                   <span className="text-[10px] text-emerald-400 block mt-1">
-                    &asymp; Rp {(wallet.totalPoints * 10).toLocaleString("id-ID")}
+                    Atomic Point Ledger
                   </span>
                 </div>
 
                 <div className="bg-white/5 border border-white/10 p-3.5">
-                  <span className="text-[10px] text-[#84827a] uppercase block">Reduksi Emisi</span>
-                  <p className="text-2xl sm:text-3xl font-bold text-emerald-400 mt-0.5">
-                    {wallet.totalCo2SavedKg}
-                    <span className="text-xs font-normal text-white/70 ml-1">kg</span>
+                  <span className="text-[10px] text-[#84827a] uppercase block">Tarif Flat Banjar</span>
+                  <p className="text-xs font-bold text-white mt-1">
+                    Organik: <span className="text-emerald-400">Rp {tariff.organicRate.toLocaleString("id-ID")}</span>
                   </p>
-                  <span className="text-[10px] text-[#84827a] block mt-1">Standar IPCC 2026</span>
+                  <p className="text-xs font-bold text-white mt-0.5">
+                    Anorganik: <span className="text-[#015186] text-blue-300">Rp {tariff.inorganicRate.toLocaleString("id-ID")}</span>
+                  </p>
+                  <span className="text-[9px] text-[#84827a] block mt-1">Flat per sesi setoran</span>
                 </div>
               </div>
 
@@ -362,136 +448,174 @@ export default function CircularExchangePage() {
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => handleStartSession()}
                   className="bg-white text-[#1d1c19] py-3 px-3 text-xs font-bold uppercase tracking-wider hover:bg-neutral-100 transition cursor-pointer flex items-center justify-center gap-2 active:scale-95"
                 >
                   <Camera className="size-4" />
-                  <span>Scan AI</span>
+                  <span>Setor Sampah</span>
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => setDrawerMode("DEPOSIT")}
+                  onClick={() => setDrawerMode("REDEEM")}
                   className="border border-white/30 text-white py-3 px-3 text-xs font-bold uppercase tracking-wider hover:bg-white/10 transition cursor-pointer flex items-center justify-center gap-2 active:scale-95"
                 >
-                  <PlusCircle className="size-4" />
-                  <span>Setor Manual</span>
+                  <Ticket className="size-4" />
+                  <span>Tukar Saldo</span>
                 </button>
               </div>
+            </div>
 
-              {/* QUICK DESKTOP AI SIMULATOR PRESETS */}
-              <div className="pt-2 border-t border-white/10 font-gt-mono text-[10px] space-y-1.5">
-                <span className="text-[#84827a] uppercase block font-semibold">
-                  Uji Coba Deteksi AI Instan:
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    { label: "Canang Organik", id: "ORGANIK" },
-                    { label: "Botol PET", id: "PET" },
-                    { label: "Kaleng Minuman", id: "METAL" },
-                  ].map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => handleSimulateVision(p.id)}
-                      className="px-2 py-1 bg-white/10 hover:bg-white/20 border border-white/15 text-white/90 cursor-pointer active:scale-95 transition"
-                    >
-                      {p.label}
-                    </button>
-                  ))}
+            {/* CARD 2: KONTROL SESI AKTIF IOT */}
+            <div className="bg-white/90 border border-[#1d1c19]/15 p-6 backdrop-blur-sm shadow-xs space-y-4 font-gt-mono text-xs">
+              <div className="flex items-center justify-between border-b border-[#1d1c19]/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <Radio className="size-4 text-[#015186] animate-pulse" />
+                  <span className="font-bold uppercase tracking-wider text-[#1d1c19]">
+                    Status Sesi Stasiun IoT
+                  </span>
                 </div>
+                {activeSession && (
+                  <span className="font-bold text-xs text-[#015186] bg-blue-50 px-2 py-0.5 border border-[#015186]/30">
+                    Sisa Waktu: {sessionTimer}
+                  </span>
+                )}
               </div>
+
+              {activeSession ? (
+                <div className="space-y-4">
+                  <div className="p-3 bg-[#fbfbfa] border border-[#1d1c19]/15 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] text-[#84827a] uppercase">Kode Sesi:</span>
+                      <span className="font-bold text-sm text-[#1d1c19]">{activeSession.sessionCode}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] text-[#84827a] uppercase">Status:</span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 border uppercase ${
+                          activeSession.status === "COMPLETED"
+                            ? "bg-emerald-50 text-emerald-800 border-emerald-600/40"
+                            : activeSession.status === "TRASH_DETECTED"
+                            ? "bg-blue-50 text-[#015186] border-[#015186]/40 animate-pulse"
+                            : activeSession.status === "NEEDS_REVIEW"
+                            ? "bg-amber-50 text-amber-900 border-amber-600/40"
+                            : "bg-zinc-100 text-[#55534c] border-zinc-300"
+                        }`}
+                      >
+                        {activeSession.status === "WAITING_TRASH"
+                          ? "1. Menunggu Sampah Masuk"
+                          : activeSession.status === "TRASH_DETECTED"
+                          ? "2. Sampah Terdeteksi! Ambil Foto"
+                          : activeSession.status === "COMPLETED"
+                          ? "3. Selesai (Saldo Cair)"
+                          : activeSession.status === "NEEDS_REVIEW"
+                          ? "Perlu Tinjauan Petugas"
+                          : activeSession.status}
+                      </span>
+                    </div>
+                  </div>
+
+                  {activeSession.status === "WAITING_TRASH" && (
+                    <div className="p-3 bg-amber-50 border border-amber-600/30 text-amber-950 space-y-2">
+                      <p className="text-[11px] leading-relaxed">
+                        Masukkan sampah ke corong stasiun sekarang. Sensor ultrasonik akan mendeteksi masuknya sampah secara otomatis.
+                      </p>
+                      {/* SIMULATOR SHORTCUT */}
+                      <button
+                        type="button"
+                        onClick={handleSimulateUltrasonic}
+                        className="w-full py-2 bg-white border border-amber-600/40 text-amber-900 hover:bg-amber-100 font-bold uppercase text-[10px] tracking-wider transition cursor-pointer active:scale-95"
+                      >
+                        Simulasikan Sampah Masuk Ultrasonic
+                      </button>
+                    </div>
+                  )}
+
+                  {activeSession.status === "TRASH_DETECTED" && (
+                    <div className="p-3 bg-blue-50 border border-[#015186]/30 text-[#015186] space-y-2">
+                      <p className="text-[11px] leading-relaxed">
+                        Sensor mendeteksi objek sampah masuk! Buka kamera HP untuk memotret dan memilih kategori sampah.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setDrawerMode("DEPOSIT_FLOW")}
+                        className="w-full py-2.5 bg-[#015186] text-white hover:bg-[#003d66] font-bold uppercase text-[11px] tracking-wider transition cursor-pointer flex items-center justify-center gap-1.5 active:scale-95"
+                      >
+                        <Camera className="size-3.5" />
+                        <span>Buka Formulir Foto &amp; Kategori &rarr;</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {activeSession.status === "COMPLETED" && (
+                    <div className="p-3 bg-emerald-50 border border-emerald-600/30 text-emerald-950 space-y-1.5">
+                      <p className="font-bold text-xs">
+                        {activeSession.isCorrected ? "Koreksi AI Selesai" : "Setoran Berhasil Disetujui!"}
+                      </p>
+                      <p className="text-[11px] leading-relaxed">
+                        Saldo reward sebesar <strong>Rp {(activeSession.rewardAmount || 0).toLocaleString("id-ID")}</strong> telah dikreditkan ke buku kas digital Anda.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setActiveSession(null)}
+                        className="mt-2 text-[10px] text-emerald-800 underline font-bold uppercase tracking-wider cursor-pointer"
+                      >
+                        Tutup Sesi Ini
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <label className="block text-[#55534c] uppercase text-[10px] font-bold">
+                    Pilih Stasiun Setor Terdekat:
+                  </label>
+                  <select
+                    value={selectedStationId}
+                    onChange={(e) => setSelectedStationId(e.target.value)}
+                    className="w-full h-11 border border-[#1d1c19]/30 bg-white px-3 font-mono text-sm focus:outline-hidden focus:border-[#1d1c19]"
+                  >
+                    {STATIONS.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.deviceId}) - {s.lokasi}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => handleStartSession(selectedStationId)}
+                    disabled={isCreatingSession}
+                    className="w-full py-3 bg-[#1d1c19] text-[#f2f1ed] text-xs font-bold uppercase tracking-wider hover:bg-black transition cursor-pointer flex items-center justify-center gap-2 active:scale-95"
+                  >
+                    <Camera className="size-4" />
+                    <span>Mulai Sesi Setor (5 Menit)</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* AI CHATBOT WIDGET */}
             <ChatbotWidget />
           </div>
 
-          {/* ----- KOLOM KANAN (7/12 KATALOG & TRANSAKSI) ----- */}
+          {/* ----- KOLOM KANAN (7/12 KATALOG VOUCHER & RIWAYAT SESI AI) ----- */}
           <div className="lg:col-span-7 space-y-6">
-            {/* MATERIAL RATES */}
-            <div className="bg-white/90 border border-[#1d1c19]/15 p-6 backdrop-blur-sm shadow-xs space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#1d1c19]/10 pb-3 font-gt-mono text-xs">
-                <div className="flex items-center gap-2">
-                  <Coins className="size-4 text-[#015186]" />
-                  <span className="font-bold uppercase tracking-wider text-[#1d1c19]">
-                    Katalog Nilai Tukar Material Hari Ini
-                  </span>
-                </div>
-
-                {/* Filter Tabs */}
-                <div className="flex gap-1 text-[10px]">
-                  {["SEMUA", "Anorganik", "Organik"].map((cat) => (
-                    <button
-                      key={cat}
-                      onClick={() => setMaterialFilter(cat)}
-                      className={`px-2.5 py-1 uppercase border cursor-pointer transition ${
-                        materialFilter === cat
-                          ? "bg-[#1d1c19] text-white border-[#1d1c19] font-bold"
-                          : "bg-white text-[#55534c] border-[#1d1c19]/15 hover:border-[#1d1c19]"
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-gt-mono text-xs">
-                {filteredMaterials.map((mat) => {
-                  const isSelected = selectedMaterial.id === mat.id;
-                  return (
-                    <div
-                      key={mat.id}
-                      onClick={() => {
-                        setSelectedMaterial(mat);
-                        setDrawerMode("DEPOSIT");
-                      }}
-                      className={`p-3.5 border transition cursor-pointer flex flex-col justify-between gap-2 shadow-2xs hover:shadow-xs active:scale-98 ${
-                        isSelected
-                          ? "border-[#015186] bg-blue-50/50 ring-1 ring-[#015186]"
-                          : "border-[#1d1c19]/15 bg-[#fbfbfa] hover:border-[#1d1c19]"
-                      }`}
-                    >
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-[#1d1c19]">{mat.name}</span>
-                          <span className="text-[9px] px-1.5 py-0.5 border border-[#1d1c19]/20 uppercase">
-                            {mat.category}
-                          </span>
-                        </div>
-                        <span className="text-[10px] text-[#84827a] block mt-1">
-                          Cegah {mat.co2PerKg} kg CO₂ / kg
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between pt-2 border-t border-[#1d1c19]/10">
-                        <span className="font-bold text-[#015186]">+{mat.pointsPerKg} Poin</span>
-                        <span className="font-semibold text-[#1d1c19]">
-                          Rp {mat.ratePerKg.toLocaleString("id-ID")}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* VOUCHER REWARD CATALOG */}
+            {/* KATALOG PENUKARAN VOUCHER */}
             <div className="bg-white/90 border border-[#1d1c19]/15 p-6 backdrop-blur-sm shadow-xs space-y-4">
               <div className="flex items-center justify-between border-b border-[#1d1c19]/10 pb-3 font-gt-mono text-xs">
                 <div className="flex items-center gap-2">
                   <Ticket className="size-4 text-[#015186]" />
                   <span className="font-bold uppercase tracking-wider text-[#1d1c19]">
-                    Tukar Poin Dengan Kebutuhan Rumah Tangga
+                    Katalog Pencairan Poin Warga
                   </span>
                 </div>
-                <span className="text-[10px] text-[#84827a]">Klaim Instan</span>
+                <span className="text-[10px] text-[#84827a]">Klaim Otomatis</span>
               </div>
 
               <div className="space-y-3 font-gt-mono text-xs">
                 {VOUCHERS.map((v) => {
-                  const canAfford = wallet.totalPoints >= v.costPoints;
+                  const canAfford = balance >= v.costPoints;
                   return (
                     <div
                       key={v.id}
@@ -506,7 +630,7 @@ export default function CircularExchangePage() {
                         </div>
                         <h3 className="font-bold text-[#1d1c19] text-sm">{v.title}</h3>
                         <span className="text-xs font-bold text-[#1d1c19]">
-                          {v.costPoints.toLocaleString("id-ID")} Poin
+                          Rp {v.costPoints.toLocaleString("id-ID")}
                         </span>
                       </div>
 
@@ -519,7 +643,7 @@ export default function CircularExchangePage() {
                             : "border-[#1d1c19]/15 bg-[#f2f1ed] text-[#84827a] cursor-not-allowed"
                         }`}
                       >
-                        {canAfford ? "Tukar Sekarang →" : "Poin Kurang"}
+                        {canAfford ? "Tukar Saldo →" : "Saldo Kurang"}
                       </button>
                     </div>
                   );
@@ -527,55 +651,82 @@ export default function CircularExchangePage() {
               </div>
             </div>
 
-            {/* RECENT SETORAN TRANSACTIONS */}
+            {/* RIWAYAT SESI SETOR IOT (DILENGKAPI BUKTI FOTO & HASIL AI) */}
             <div className="bg-white/90 border border-[#1d1c19]/15 p-6 backdrop-blur-sm shadow-xs space-y-4">
               <div className="flex items-center justify-between border-b border-[#1d1c19]/10 pb-3 font-gt-mono text-xs">
                 <div className="flex items-center gap-2">
                   <Clock className="size-4 text-[#55534c]" />
                   <span className="font-bold uppercase tracking-wider text-[#1d1c19]">
-                    Riwayat Transaksi Setoran
+                    Riwayat Sesi &amp; Verifikasi AI Anti-Curang ({history.length})
                   </span>
                 </div>
-                <div className="flex gap-1 text-[10px]">
-                  {["SEMUA", "ORGANIK", "ANORGANIK"].map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => setHistoryFilter(t)}
-                      className={`px-2 py-0.5 uppercase border cursor-pointer ${
-                        historyFilter === t
-                          ? "bg-[#1d1c19] text-white border-[#1d1c19]"
-                          : "bg-white text-[#55534c] border-[#1d1c19]/15 hover:border-[#1d1c19]"
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
+                <button
+                  onClick={loadCitizenData}
+                  className="text-[10px] text-[#84827a] hover:text-[#1d1c19] flex items-center gap-1 cursor-pointer"
+                >
+                  <RotateCcw className="size-3" /> Refresh
+                </button>
               </div>
 
               <div className="divide-y divide-[#1d1c19]/10 font-gt-mono text-xs">
-                {filteredHistory.map((tx) => (
-                  <div key={tx.id} className="py-3 flex items-center justify-between">
-                    <div>
-                      <span className="font-bold text-[#1d1c19] block">
-                        {(tx.weightGram / 1000).toFixed(2)} kg &bull;{" "}
-                        {tx.wasteType === "ORGANIC" ? "Organik Canang" : "Anorganik"}
-                      </span>
-                      <span className="text-[10px] text-[#84827a]">
-                        {new Date(tx.createdAt).toLocaleDateString("id-ID", {
-                          day: "numeric",
-                          month: "short",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}{" "}
-                        &bull; ID: {tx.id}
-                      </span>
+                {history.map((tx) => (
+                  <div key={tx.id} className="py-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-bold text-[#1d1c19] text-sm block">
+                          Sesi {tx.sessionCode} &bull; {tx.userCategory || "Umum"}
+                        </span>
+                        <span className="text-[10px] text-[#84827a]">
+                          {new Date(tx.createdAt).toLocaleDateString("id-ID", {
+                            day: "numeric",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="font-bold text-sm text-[#015186] block">
+                          +Rp {tx.rewardAmount.toLocaleString("id-ID")}
+                        </span>
+                        <span
+                          className={`text-[9px] px-1.5 py-0.5 border font-semibold uppercase ${
+                            tx.status === "COMPLETED"
+                              ? "bg-emerald-50 text-emerald-800 border-emerald-600/40"
+                              : tx.status === "NEEDS_REVIEW"
+                              ? "bg-amber-50 text-amber-900 border-amber-600/40"
+                              : "bg-zinc-100 text-[#55534c] border-zinc-300"
+                          }`}
+                        >
+                          {tx.status === "COMPLETED"
+                            ? tx.isCorrected
+                              ? "Dikoreksi AI"
+                              : "Disetujui"
+                            : tx.status === "NEEDS_REVIEW"
+                            ? "Perlu Tinjauan Petugas"
+                            : tx.status}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="text-right">
-                      <span className="font-bold text-[#015186] block">+{tx.pointsEarned} Poin</span>
-                      <span className="text-[10px] text-emerald-800">-{tx.co2SavedKg} kg CO₂</span>
-                    </div>
+                    {/* DETAIL HASIL AI VISION SEBAGAI BUKTI RIWAYAT */}
+                    {tx.aiReason && (
+                      <div className="p-2.5 bg-[#fbfbfa] border border-[#1d1c19]/10 text-[11px] space-y-1">
+                        <div className="flex items-center justify-between text-[10px] text-[#84827a]">
+                          <span className="flex items-center gap-1">
+                            <Sparkles className="size-3 text-[#015186]" />
+                            Deteksi AI: <strong>{tx.aiCategory?.toUpperCase()}</strong>
+                          </span>
+                          {tx.aiConfidence && (
+                            <span className="font-semibold text-emerald-800">
+                              Akurasi: {Math.round(tx.aiConfidence * 100)}%
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[#55534c]">{tx.aiReason}</p>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -584,98 +735,17 @@ export default function CircularExchangePage() {
         </div>
       </div>
 
-      {/* ----- DRAWER: CAMERA AI PREVIEW ----- */}
-      {drawerMode === "CAMERA" && (
+      {/* ----- MODAL / DRAWER: FORMULIR FOTO & KATEGORI SETORAN IOT ----- */}
+      {drawerMode === "DEPOSIT_FLOW" && (
         <div className="fixed inset-0 z-50 bg-[#1d1c19]/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-[#f2f1ed] border border-[#1d1c19] w-full max-w-lg p-6 shadow-2xl space-y-4 font-gt-mono">
             <div className="flex items-center justify-between border-b border-[#1d1c19]/15 pb-3">
               <div>
                 <span className="text-[10px] text-[#015186] font-bold uppercase tracking-wider block">
-                  HASIL SCAN VISION AI
+                  VERIFIKASI FOTO AI VISION
                 </span>
                 <h3 className="text-lg font-bold text-[#1d1c19]">
-                  Analisis Material &amp; Optimasi Ukuran
-                </h3>
-              </div>
-              <button
-                onClick={() => {
-                  setDrawerMode("NONE");
-                  setCompressedResult(null);
-                }}
-                className="text-[#84827a] hover:text-[#1d1c19] p-1 cursor-pointer"
-              >
-                <X className="size-5" />
-              </button>
-            </div>
-
-            {isCompressing ? (
-              <div className="py-12 text-center space-y-3 font-gt-mono">
-                <div className="size-8 border-2 border-[#015186] border-t-transparent rounded-full animate-spin mx-auto" />
-                <p className="text-xs text-[#55534c]">
-                  Mengompresi data &amp; mengidentifikasi polimer sampah...
-                </p>
-              </div>
-            ) : compressedResult ? (
-              <div className="space-y-4">
-                <div className="relative border border-[#1d1c19]/20 bg-black h-56 flex items-center justify-center overflow-hidden">
-                  <Image
-                    src={compressedResult.dataUrl}
-                    alt="Pratinjau Sampah"
-                    fill
-                    unoptimized
-                    className="object-contain"
-                  />
-                  <div className="absolute bottom-2 left-2 right-2 bg-black/80 text-white p-2 text-[10px] font-mono flex justify-between">
-                    <span>Asli: {compressedResult.originalSizeKb} KB</span>
-                    <span className="text-emerald-400 font-bold">
-                      Kompresi: {compressedResult.compressedSizeKb} KB (-{compressedResult.compressionRatio}%)
-                    </span>
-                  </div>
-                </div>
-
-                <div className="bg-white border border-[#1d1c19]/15 p-4 space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-[10px] text-[#84827a] uppercase font-bold flex items-center gap-1">
-                      <Sparkles className="size-3 text-[#015186]" />
-                      Klasifikasi Terdeteksi:
-                    </span>
-                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 border border-emerald-600/30">
-                      Akurasi: {compressedResult.predictedConfidence}%
-                    </span>
-                  </div>
-                  <p className="text-base font-bold text-[#1d1c19]">
-                    {selectedMaterial.name} ({selectedMaterial.category})
-                  </p>
-                  <p className="text-xs text-[#55534c]">
-                    Sistem otomatis mengarahkan ke tarif Rp{selectedMaterial.ratePerKg.toLocaleString("id-ID")}/kg.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setDrawerMode("DEPOSIT")}
-                  className="w-full bg-[#1d1c19] text-[#f2f1ed] py-3.5 px-4 text-xs font-bold uppercase tracking-wider hover:bg-black transition cursor-pointer flex items-center justify-center gap-2 active:scale-95"
-                >
-                  <span>Lanjut ke Formulir Timbangan</span>
-                  <ChevronRight className="size-4" />
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      )}
-
-      {/* ----- DRAWER: SETORAN FORM ----- */}
-      {drawerMode === "DEPOSIT" && (
-        <div className="fixed inset-0 z-50 bg-[#1d1c19]/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#f2f1ed] border border-[#1d1c19] w-full max-w-lg p-6 shadow-2xl space-y-4 font-gt-mono">
-            <div className="flex items-center justify-between border-b border-[#1d1c19]/15 pb-3">
-              <div>
-                <span className="text-[10px] text-[#015186] font-bold uppercase tracking-wider block">
-                  ENTRI SETORAN SAMPAH
-                </span>
-                <h3 className="text-lg font-bold text-[#1d1c19]">
-                  Input Berat Timbangan &amp; Klaim Poin
+                  Sesi: {activeSession?.sessionCode || "Setoran Baru"}
                 </h3>
               </div>
               <button
@@ -686,112 +756,137 @@ export default function CircularExchangePage() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmitDeposit} className="space-y-4 text-xs">
+            <div className="space-y-4 text-xs">
+              {/* STEP 1: PILIH KATEGORI */}
               <div>
                 <label className="block text-[#55534c] uppercase text-[10px] mb-2 font-bold">
-                  1. Pilih Jenis Material:
+                  1. Pilih Kategori Sampah Anda:
                 </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {MATERIAL_RATES.map((mat) => {
-                    const isSelected = selectedMaterial.id === mat.id;
-                    return (
-                      <button
-                        key={mat.id}
-                        type="button"
-                        onClick={() => setSelectedMaterial(mat)}
-                        className={`p-2.5 text-left border transition cursor-pointer active:scale-98 ${
-                          isSelected
-                            ? "border-[#1d1c19] bg-[#1d1c19] text-white font-bold"
-                            : "border-[#1d1c19]/20 bg-white text-[#1d1c19] hover:border-[#1d1c19]/50"
-                        }`}
-                      >
-                        <span className="block truncate text-xs">{mat.name}</span>
-                        <span className="block text-[10px] opacity-75">
-                          +{mat.pointsPerKg} Poin/kg
-                        </span>
-                      </button>
-                    );
-                  })}
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCategory("ORGANIK")}
+                    className={`p-3.5 text-left border transition cursor-pointer active:scale-98 ${
+                      selectedCategory === "ORGANIK"
+                        ? "border-[#1d1c19] bg-[#1d1c19] text-white font-bold shadow-xs"
+                        : "border-[#1d1c19]/20 bg-white text-[#1d1c19] hover:border-[#1d1c19]"
+                    }`}
+                  >
+                    <span className="block text-sm">Organik</span>
+                    <span className="block text-[10px] opacity-75 mt-0.5">
+                      Canang, sisa makanan, daun &bull; Rp {tariff.organicRate.toLocaleString("id-ID")}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCategory("ANORGANIK")}
+                    className={`p-3.5 text-left border transition cursor-pointer active:scale-98 ${
+                      selectedCategory === "ANORGANIK"
+                        ? "border-[#1d1c19] bg-[#1d1c19] text-white font-bold shadow-xs"
+                        : "border-[#1d1c19]/20 bg-white text-[#1d1c19] hover:border-[#1d1c19]"
+                    }`}
+                  >
+                    <span className="block text-sm">Anorganik</span>
+                    <span className="block text-[10px] opacity-75 mt-0.5">
+                      Botol plastik, kardus, kaleng &bull; Rp {tariff.inorganicRate.toLocaleString("id-ID")}
+                    </span>
+                  </button>
                 </div>
               </div>
 
+              {/* STEP 2: AMBIL FOTO KAMERA */}
               <div>
                 <label className="block text-[#55534c] uppercase text-[10px] mb-2 font-bold">
-                  2. Berat Sampah (Gram):
+                  2. Ambil Foto Sampah (Kompresi Otomatis Maks 1280px):
                 </label>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleAdjustWeight(-250)}
-                    className="size-11 bg-white border border-[#1d1c19]/30 text-lg font-bold cursor-pointer active:scale-95"
-                  >
-                    -
-                  </button>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    step="50"
-                    min="50"
-                    max="50000"
-                    required
-                    value={weightInput}
-                    onChange={(e) => setWeightInput(e.target.value)}
-                    className="flex-1 h-11 bg-white border border-[#1d1c19]/30 text-center text-lg font-bold font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleAdjustWeight(250)}
-                    className="size-11 bg-white border border-[#1d1c19]/30 text-lg font-bold cursor-pointer active:scale-95"
-                  >
-                    +
-                  </button>
-                </div>
 
-                <div className="flex gap-2 mt-2">
-                  {[500, 1000, 2000, 5000].map((quick) => (
+                {compressedResult ? (
+                  <div className="space-y-2">
+                    <div className="relative border border-[#1d1c19]/30 bg-black h-48 w-full flex items-center justify-center overflow-hidden">
+                      <Image
+                        src={compressedResult.dataUrl}
+                        alt="Foto Sampah"
+                        fill
+                        unoptimized
+                        className="object-contain"
+                      />
+                      <div className="absolute bottom-2 left-2 right-2 bg-black/80 text-white p-2 text-[10px] flex justify-between">
+                        <span>Ukuran: {compressedResult.compressedSizeKb} KB</span>
+                        <span className="text-emerald-400 font-bold">Terkompresi ({compressedResult.compressionRatio}%)</span>
+                      </div>
+                    </div>
+
                     <button
-                      key={quick}
                       type="button"
-                      onClick={() => setWeightInput(String(quick))}
-                      className="flex-1 py-1.5 border border-[#1d1c19]/20 bg-white text-[10px] hover:border-[#1d1c19] cursor-pointer font-bold active:scale-95 transition"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="text-[10px] text-[#015186] underline font-bold uppercase tracking-wider cursor-pointer"
                     >
-                      {quick >= 1000 ? `${quick / 1000}kg` : `${quick}g`}
+                      Ambil Ulang Foto Kamera
                     </button>
-                  ))}
+                  </div>
+                ) : (
+                  <div className="border border-dashed border-[#1d1c19]/30 p-6 bg-white text-center space-y-3">
+                    <div className="size-10 mx-auto border border-[#1d1c19]/20 bg-[#fbfbfa] flex items-center justify-center">
+                      <Camera className="size-5 text-[#55534c]" />
+                    </div>
+                    <p className="text-[11px] text-[#55534c]">
+                      {isCompressing
+                        ? "Mengompresi foto kamera ke resolusi optimal 1280px..."
+                        : "Arahkan kamera ke sampah yang baru saja Anda masukkan ke stasiun."}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isCompressing}
+                      className="py-2.5 px-4 bg-[#1d1c19] text-white text-xs font-bold uppercase tracking-wider hover:bg-black transition cursor-pointer active:scale-95 shadow-xs"
+                    >
+                      {isCompressing ? "Memproses Gambar..." : "Buka Kamera Belakang HP"}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* SHORTCUT PRESET SIMULATOR 1-KLIK DESKTOP */}
+              <div className="p-3 bg-[#fbfbfa] border border-[#1d1c19]/15 space-y-1.5 text-[10px]">
+                <span className="text-[#84827a] font-bold uppercase block">
+                  Uji Coba Cepat Preset (Tanpa Kamera):
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleQuickPreset("ORGANIK", "/samples/sample-canang.png")}
+                    className="flex-1 py-1.5 bg-white border border-[#1d1c19]/20 hover:border-[#1d1c19] font-bold cursor-pointer active:scale-95"
+                  >
+                    Foto Canang Organik
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickPreset("ANORGANIK", "/samples/sample-pet.png")}
+                    className="flex-1 py-1.5 bg-white border border-[#1d1c19]/20 hover:border-[#1d1c19] font-bold cursor-pointer active:scale-95"
+                  >
+                    Foto Botol Anorganik
+                  </button>
                 </div>
               </div>
 
-              <div className="bg-white border border-[#1d1c19]/15 p-3.5 space-y-1.5 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-[#84827a]">Total Berat:</span>
-                  <span className="font-bold text-[#1d1c19]">{weightKg} kg</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[#84827a]">Perolehan Poin:</span>
-                  <span className="font-bold text-[#015186]">+{calcPoints} Poin</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[#84827a]">Konversi Kas:</span>
-                  <span className="font-bold text-emerald-800">
-                    Rp {calcRupiah.toLocaleString("id-ID")}
-                  </span>
-                </div>
-                <div className="flex justify-between pt-1 border-t border-[#1d1c19]/10">
-                  <span className="text-[#84827a]">Pencegahan Emisi:</span>
-                  <span className="font-bold text-[#1d1c19]">-{calcCo2} kg CO₂</span>
-                </div>
-              </div>
-
+              {/* SUBMIT BUTTON */}
               <div className="pt-2">
                 <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-[#1d1c19] text-[#f2f1ed] py-3.5 px-4 text-xs font-bold uppercase tracking-wider hover:bg-black transition cursor-pointer active:scale-95"
+                  type="button"
+                  onClick={handleSubmitVerification}
+                  disabled={isVerifyingAi || !compressedResult}
+                  className="w-full bg-[#1d1c19] text-[#f2f1ed] py-3.5 px-4 text-xs font-bold uppercase tracking-wider hover:bg-black transition cursor-pointer flex items-center justify-center gap-2 active:scale-95 shadow-xs"
                 >
-                  {isSubmitting ? "Menyimpan Transaksi..." : "Validasi & Simpan Setoran →"}
+                  <Sparkles className="size-4" />
+                  <span>
+                    {isVerifyingAi
+                      ? "Memverifikasi AI Vision Anti-Curang..."
+                      : "Verifikasi AI & Klaim Saldo Flat →"}
+                  </span>
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
@@ -803,7 +898,7 @@ export default function CircularExchangePage() {
             <div className="flex items-center justify-between border-b border-[#1d1c19]/15 pb-3">
               <div>
                 <span className="text-[10px] text-[#015186] font-bold uppercase tracking-wider block">
-                  KONFIRMASI PENUKARAN
+                  PENUKARAN SALDO BANK SAMPAH
                 </span>
                 <h3 className="text-base font-bold text-[#1d1c19]">
                   {selectedVoucher.title}
@@ -822,20 +917,20 @@ export default function CircularExchangePage() {
 
             <div className="bg-white border border-[#1d1c19]/15 p-4 space-y-2">
               <div className="flex justify-between">
-                <span className="text-[#84827a]">Biaya Poin:</span>
+                <span className="text-[#84827a]">Nominal Penukaran:</span>
                 <span className="font-bold text-[#1d1c19]">
-                  {selectedVoucher.costPoints.toLocaleString("id-ID")} Poin
+                  Rp {selectedVoucher.costPoints.toLocaleString("id-ID")}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#84827a]">Sisa Poin Anda:</span>
+                <span className="text-[#84827a]">Sisa Saldo Kas Anda:</span>
                 <span className="font-bold text-emerald-800">
-                  {(wallet.totalPoints - selectedVoucher.costPoints).toLocaleString("id-ID")} Poin
+                  Rp {(balance - selectedVoucher.costPoints).toLocaleString("id-ID")}
                 </span>
               </div>
               <div className="flex justify-between pt-2 border-t border-[#1d1c19]/10">
-                <span className="text-[#84827a]">Nomor Tujuan SMS:</span>
-                <span className="font-bold text-[#1d1c19]">0812-3456-7890</span>
+                <span className="text-[#84827a]">Penyedia Layanan:</span>
+                <span className="font-bold text-[#1d1c19]">{selectedVoucher.issuer}</span>
               </div>
             </div>
 
@@ -843,7 +938,7 @@ export default function CircularExchangePage() {
               onClick={confirmRedeem}
               className="w-full bg-[#1d1c19] text-[#f2f1ed] py-3.5 px-4 text-xs font-bold uppercase tracking-wider hover:bg-black transition cursor-pointer active:scale-95"
             >
-              Konfirmasi Tukar Voucher &rarr;
+              Ajukan Penukaran Saldo &rarr;
             </button>
           </div>
         </div>
