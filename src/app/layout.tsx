@@ -25,7 +25,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="id" className="h-full antialiased scroll-smooth">
+    <html lang="id" className="h-full antialiased scroll-smooth" data-scroll-behavior="smooth">
       <body className="min-h-[100dvh] bg-[#f2f1ed] text-[#1d1c19] selection:bg-[#1d1c19] selection:text-[#f2f1ed] flex flex-col">
         <PwaRegister />
         <BottomNav />
