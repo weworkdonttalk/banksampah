@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import BottomNav from "@/components/navigation/bottom-nav";
+import DesktopNavOverlay from "@/components/landing/desktop-nav-overlay";
 import PwaRegister from "@/components/pwa/pwa-register";
 import "./globals.css";
 
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="id" className="h-full antialiased scroll-smooth" data-scroll-behavior="smooth">
       <body className="min-h-[100dvh] bg-[#f2f1ed] text-[#1d1c19] selection:bg-[#1d1c19] selection:text-[#f2f1ed] flex flex-col">
         <PwaRegister />
+        <DesktopNavOverlay />
         <BottomNav />
         <main className="flex-1 min-h-[100dvh]">{children}</main>
       </body>

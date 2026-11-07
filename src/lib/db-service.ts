@@ -376,15 +376,33 @@ export const dbService = {
 
   async getCitizens(banjarId: string) {
     if (await isDatabaseConnected()) {
-      return prisma.user.findMany({
+      const users = await prisma.user.findMany({
         where: { banjarId, role: Role.WARGA },
         select: { id: true, name: true, email: true, phone: true },
       });
+      return users.map((u) => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+        saldoRupiah: 0,
+      }));
     }
     const mock = getMockDB();
     return mock.users
       .filter((u) => u.banjarId === banjarId && u.role === Role.WARGA)
-      .map((u) => ({ id: u.id, name: u.name, email: u.email, phone: u.phone }));
+      .map((u) => {
+        const balance = mock.ledger
+          .filter((l) => l.userId === u.id)
+          .reduce((acc, l) => acc + (l.type === "CREDIT" ? l.amount : -l.amount), 0);
+        return {
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          phone: u.phone,
+          saldoRupiah: balance,
+        };
+      });
   },
 
   async recordDeposit(data: {

@@ -216,11 +216,11 @@ export default function PearLandingPage() {
       {/* 2. MAIN STAGE: CHAPTER 1 — THE MODEL (#top & #model) */}
       <section
         id="model"
-        className="relative z-10 min-h-screen px-6 sm:px-12 lg:px-16 pt-32 pb-24 max-w-5xl mx-auto flex flex-col justify-between"
+        className="relative z-10 min-h-screen px-6 sm:px-12 lg:px-16 pt-12 sm:pt-28 md:pt-32 pb-24 max-w-5xl mx-auto flex flex-col justify-between"
       >
-        <div className="pt-6">
+        <div className="pt-0 sm:pt-4 md:pt-6">
           <div
-            className="inline-flex items-center gap-2 font-gt-mono text-[10px] text-[#55534c] tracking-widest uppercase mb-6 border border-[#1d1c19]/15 px-2.5 py-1 bg-[#f2f1ed]/60 backdrop-blur-sm"
+            className="inline-flex items-center gap-2 font-gt-mono text-[10px] text-[#55534c] tracking-widest uppercase mb-4 sm:mb-6 border border-[#1d1c19]/15 px-2.5 py-1 bg-[#f2f1ed]/60 backdrop-blur-sm"
           >
             <svg viewBox="0 0 24 24" className="star-mark">
               <path d="M12 0Q13.1 10.9 24 12Q13.1 13.1 0 12Q10.9 10.9 12 0Z" />
@@ -242,19 +242,19 @@ export default function PearLandingPage() {
 
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <Link
-              href="/daftar-banjar"
+              href="/login"
               className="relative inline-flex items-center gap-3 border border-[#1d1c19] bg-[#1d1c19] text-[#f2f1ed] px-6 py-3.5 text-xs font-semibold tracking-wider uppercase overflow-hidden group shadow-md cursor-pointer active:scale-95"
             >
               <span className="cta-flood" />
-              <span className="relative z-10">Daftarkan Banjar Anda</span>
+              <span className="relative z-10">Masuk Portal Multi-Peran</span>
               <span className="relative z-10 transition-transform group-hover:translate-x-1">→</span>
             </Link>
 
             <Link
-              href="/login"
+              href="/dashboard"
               className="inline-flex items-center gap-2 border border-[#1d1c19]/30 bg-white/70 px-5 py-3.5 text-xs font-semibold tracking-wider uppercase text-[#1d1c19] hover:bg-white active:scale-95 transition"
             >
-              Masuk Sistem →
+              Live Telemetri →
             </Link>
           </div>
         </div>
@@ -615,10 +615,10 @@ export default function PearLandingPage() {
                 KEMITRAAN BANJAR
               </span>
               <Link
-                href="/daftar-banjar"
+                href="/login"
                 className="w-full min-h-[44px] border border-white/40 bg-white text-black py-2.5 font-bold uppercase tracking-wider hover:bg-zinc-200 transition text-center block"
               >
-                Daftar Banjar &rarr;
+                Portal Masuk Banjar &rarr;
               </Link>
             </div>
           </div>

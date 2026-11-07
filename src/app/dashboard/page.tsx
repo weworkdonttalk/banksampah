@@ -1,573 +1,533 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import PearCanvas from "@/components/webgl/pear-canvas";
+import RiskScoreWidget from "@/components/ops/risk-score-widget";
+import CylinderGauge from "@/components/ops/cylinder-gauge";
+import ChokeModeControl from "@/components/ops/choke-mode-control";
+import { playSuccessChime, playSirenSound } from "@/lib/audio-alert";
+import {
+  Flame,
+  ShieldCheck,
+  AlertTriangle,
+  RotateCcw,
+  Activity,
+  Terminal,
+  Radio,
+  SlidersHorizontal,
+  CheckCircle2,
+} from "lucide-react";
 
-interface Station {
-  id: string;
-  deviceId: string;
-  apiKey: string;
-  name: string;
-  lokasi: string;
-  tempWarnThreshold: number;
-  tempDangerThreshold: number;
-  smokeWarnThreshold: number;
-  smokeDangerThreshold: number;
-  isOnline: boolean;
-  status: "AMAN" | "WASPADA" | "BAHAYA";
-  latestReading: {
-    temp: number;
-    smoke: number;
-    humidity?: number;
-    createdAt: string;
-  } | null;
-  alerts: Array<{
-    id: string;
-    type: string;
-    level: "WASPADA" | "BAHAYA";
-    value: number;
-    status: string;
-    createdAt: string;
-  }>;
-}
+const STATIONS = [
+  { id: "BALI-ECO-01", name: "Banjar Kayumas", zone: "Denpasar Timur", baseTemp: 31.2, baseGas: 120, fill: 35, dist: 26 },
+  { id: "BALI-ECO-02", name: "Banjar Sanur", zone: "Denpasar Selatan", baseTemp: 29.8, baseGas: 95, fill: 68, dist: 14 },
+  { id: "BALI-ECO-03", name: "Banjar Seminyak", zone: "Badung", baseTemp: 33.5, baseGas: 165, fill: 82, dist: 8 },
+];
 
-export default function DashboardPage() {
-  const router = useRouter();
-  const [stations, setStations] = useState<Station[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
-  const [readingsHistory, setReadingsHistory] = useState<any[]>([]);
-  const [historyRange, setHistoryRange] = useState<1 | 24>(24);
-  const [user, setUser] = useState<any>(null);
-  const [resolvingId, setResolvingId] = useState<string | null>(null);
-  const [thresholdModal, setThresholdModal] = useState(false);
-  const [thresholdForm, setThresholdForm] = useState({
-    tempWarn: 45,
-    tempDanger: 60,
-    smokeWarn: 300,
-    smokeDanger: 600,
-  });
+export default function OpsHazardPage() {
+  const [activeStation, setActiveStation] = useState(STATIONS[0].id);
+  const [isChoked, setIsChoked] = useState(false);
+  const [isWaitingSensor, setIsWaitingSensor] = useState(false);
+  const [isSimulatedFire, setIsSimulatedFire] = useState(false);
+  const [isTabActive, setIsTabActive] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<string>("Baru saja");
+  const [tempData, setTempData] = useState([28.4, 29.1, 29.8, 30.2, 31.2]);
+  const [gasData, setGasData] = useState([85, 92, 104, 110, 120]);
+  const [selectedBarIdx, setSelectedBarIdx] = useState<number | null>(null);
 
-  const isTabActive = useRef(true);
+  const [logs, setLogs] = useState<string[]>([
+    "Transmisi telemetri IoT online via 4G/LTE.",
+    "Katup Choke Mode siaga di sudut 90° (normal).",
+    "Sensor suhu inframerah membaca 31.2°C di dalam kompartemen.",
+  ]);
 
-  // Tab visibility detection to stop polling when tab is inactive
+  const currentStationInfo = STATIONS.find((s) => s.id === activeStation) || STATIONS[0];
+
   useEffect(() => {
     const handleVisibility = () => {
-      isTabActive.current = !document.hidden;
+      const active = !document.hidden;
+      setIsTabActive(active);
+      if (active) {
+        setLastUpdated(
+          new Date().toLocaleTimeString("id-ID", {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          })
+        );
+      }
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
 
-  const fetchData = async () => {
-    if (!isTabActive.current) return;
-    try {
-      const res = await fetch("/api/stations");
-      if (!res.ok) return;
-      const data = await res.json();
-      setStations(data.stations || []);
-
-      if (data.stations?.length > 0 && !selectedStationId) {
-        setSelectedStationId(data.stations[0].id);
-      }
-    } catch (err) {
-      console.error("Dashboard fetch error:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchHistory = async (stationId: string, hours: number) => {
-    try {
-      const res = await fetch(`/api/stations/${stationId}?hours=${hours}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      setReadingsHistory(data.readings || []);
-    } catch (err) {
-      console.error("Fetch history error:", err);
-    }
-  };
-
+  // Live telemetry pulse: subtle realistic fluctuations
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((d) => {
-        if (!d.authenticated) {
-          router.push("/login");
-        } else {
-          setUser(d.user);
-        }
+    if (!isTabActive || isSimulatedFire) return;
+    const interval = setInterval(() => {
+      const jitterTemp = Number((Math.random() * 0.4 - 0.2).toFixed(1));
+      const jitterGas = Math.floor(Math.random() * 6 - 3);
+
+      setTempData((prev) => {
+        const last = prev[prev.length - 1];
+        const next = Number(Math.max(26, Math.min(38, last + jitterTemp)).toFixed(1));
+        return [...prev.slice(1), next];
       });
-  }, [router]);
 
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 4000); // Poll every 4 seconds
+      setGasData((prev) => {
+        const last = prev[prev.length - 1];
+        const next = Math.max(60, Math.min(220, last + jitterGas));
+        return [...prev.slice(1), next];
+      });
+
+      setLastUpdated(
+        new Date().toLocaleTimeString("id-ID", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        })
+      );
+    }, 3500);
     return () => clearInterval(interval);
-  }, [selectedStationId]);
+  }, [isTabActive, isSimulatedFire]);
 
   useEffect(() => {
-    if (selectedStationId) {
-      fetchHistory(selectedStationId, historyRange);
-    }
-  }, [selectedStationId, historyRange]);
-
-  // Vibrate on danger
-  useEffect(() => {
-    const hasDanger = stations.some((s) => s.status === "BAHAYA");
-    if (hasDanger && typeof window !== "undefined" && "vibrate" in navigator) {
-      navigator.vibrate([300, 100, 300, 100, 500]);
-    }
-  }, [stations]);
-
-  const handleResolveAlert = async (alertId: string) => {
-    setResolvingId(alertId);
-    try {
-      const res = await fetch(`/api/alerts/${alertId}/resolve`, { method: "POST" });
-      if (res.ok) {
-        await fetchData();
+    if (isSimulatedFire) {
+      playSirenSound();
+      if ("vibrate" in navigator) {
+        try {
+          navigator.vibrate([200, 100, 200, 100, 400]);
+        } catch {
+          // ignore
+        }
       }
-    } finally {
-      setResolvingId(null);
+    }
+  }, [isSimulatedFire]);
+
+  const toggleFireSimulation = () => {
+    const nextState = !isSimulatedFire;
+    setIsSimulatedFire(nextState);
+    if (nextState) {
+      setTempData([32.0, 38.5, 46.2, 53.0, 58.4]);
+      setGasData([140, 210, 320, 410, 485]);
+      setLogs((prev) => [
+        `[${new Date().toLocaleTimeString()}] BAHAYA: Anomali panas 58.4°C dan gas 485 PPM terdeteksi di ${currentStationInfo.name}!`,
+        ...prev.slice(0, 15),
+      ]);
+    } else {
+      playSuccessChime();
+      setTempData([
+        currentStationInfo.baseTemp - 1.5,
+        currentStationInfo.baseTemp - 1.0,
+        currentStationInfo.baseTemp - 0.5,
+        currentStationInfo.baseTemp - 0.2,
+        currentStationInfo.baseTemp,
+      ]);
+      setGasData([
+        currentStationInfo.baseGas - 25,
+        currentStationInfo.baseGas - 18,
+        currentStationInfo.baseGas - 10,
+        currentStationInfo.baseGas - 5,
+        currentStationInfo.baseGas,
+      ]);
+      setLogs((prev) => [
+        `[${new Date().toLocaleTimeString()}] Simulasi bahaya dihentikan. Status kembali normal.`,
+        ...prev.slice(0, 15),
+      ]);
     }
   };
 
-  const handleTriggerSim = async (mode: "normal" | "warning" | "danger") => {
-    const st = stations.find((s) => s.id === selectedStationId);
-    if (!st) return;
-    await fetch("/api/simulator", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ deviceId: st.deviceId, mode }),
-    });
-    await fetchData();
-    if (selectedStationId) fetchHistory(selectedStationId, historyRange);
+  const handleToggleChoke = (chokeState: boolean) => {
+    setIsChoked(chokeState);
+    if ("vibrate" in navigator) {
+      try {
+        navigator.vibrate(120);
+      } catch {
+        // ignore
+      }
+    }
+    if (chokeState) {
+      playSuccessChime();
+      setLogs((prev) => [
+        `[${new Date().toLocaleTimeString()}] Katup darurat ditutup rapat (0° posisi kedap udara).`,
+        ...prev.slice(0, 15),
+      ]);
+    } else {
+      setLogs((prev) => [
+        `[${new Date().toLocaleTimeString()}] Kunci katup dibuka kembali ke posisi siaga 90°.`,
+        ...prev.slice(0, 15),
+      ]);
+    }
   };
 
-  const handleSaveThresholds = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedStationId) return;
-    await fetch(`/api/stations/${selectedStationId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tempWarnThreshold: thresholdForm.tempWarn,
-        tempDangerThreshold: thresholdForm.tempDanger,
-        smokeWarnThreshold: thresholdForm.smokeWarn,
-        smokeDangerThreshold: thresholdForm.smokeDanger,
-      }),
-    });
-    setThresholdModal(false);
-    fetchData();
+  const handleSelectStation = (st: typeof STATIONS[0]) => {
+    setActiveStation(st.id);
+    setIsChoked(false);
+    setIsSimulatedFire(false);
+    setTempData([
+      st.baseTemp - 1.5,
+      st.baseTemp - 1.0,
+      st.baseTemp - 0.5,
+      st.baseTemp - 0.2,
+      st.baseTemp,
+    ]);
+    setGasData([
+      st.baseGas - 25,
+      st.baseGas - 18,
+      st.baseGas - 10,
+      st.baseGas - 5,
+      st.baseGas,
+    ]);
+    setLogs((prev) => [
+      `[${new Date().toLocaleTimeString()}] Beralih telemetri aktif ke ${st.name} (${st.zone}).`,
+      ...prev.slice(0, 15),
+    ]);
   };
-
-  const selectedStation = stations.find((s) => s.id === selectedStationId);
-  const activeDanger = stations.find((s) => s.status === "BAHAYA");
-
-  if (loading) {
-    return (
-      <div className="min-h-[100dvh] flex items-center justify-center p-6">
-        <div className="font-gt-mono text-xs uppercase tracking-widest text-[#55534c] animate-pulse">
-          MEMUAT TELEMETRI IOT KAWASAN...
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="min-h-[100dvh] pb-24 font-sans">
-      {/* FULL-WIDTH DANGER BANNER IF ANY STATION IN DANGER */}
-      {activeDanger && (
-        <div className="bg-red-600 text-white px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sticky top-0 z-40 shadow-lg">
-          <div className="flex items-center gap-2">
-            <span className="size-3 rounded-full bg-white animate-ping" />
-            <span className="font-gt-mono text-xs font-bold uppercase tracking-widest">
-              BAHAYA KRITIS: {activeDanger.name} ({activeDanger.deviceId})
-            </span>
-          </div>
-          <p className="text-xs">
-            Suhu {activeDanger.latestReading?.temp}°C atau Asap {activeDanger.latestReading?.smoke} PPM melampaui batas bahaya!
-          </p>
-          {activeDanger.alerts?.[0] && (
-            <button
-              onClick={() => handleResolveAlert(activeDanger.alerts[0].id)}
-              disabled={resolvingId === activeDanger.alerts[0].id}
-              className="bg-white text-red-700 px-3 py-1.5 text-xs font-bold uppercase tracking-wider hover:bg-zinc-100 transition whitespace-nowrap"
-            >
-              {resolvingId === activeDanger.alerts[0].id ? "Menangani..." : "Tandai Ditangani ✓"}
-            </button>
-          )}
-        </div>
-      )}
+    <div className="relative min-h-screen bg-[#f2f1ed] text-[#1d1c19] selection:bg-[#1d1c19] selection:text-[#f2f1ed]">
+      {/* ----- CANVAS BACKGROUND ----- */}
+      <PearCanvas />
 
-      {/* TOP HEADER */}
-      <header className="border-b border-[#1d1c19]/15 px-4 sm:px-8 py-4 bg-white/70 backdrop-blur-md sticky top-0 z-30">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div>
-            <div className="font-gt-mono text-[10px] text-[#55534c] tracking-widest uppercase">
-              PUSAT KENDALI IOT // {user?.banjar?.nama || "BALI SMART BANJAR"}
-            </div>
-            <h1 className="text-xl font-bold tracking-tight text-[#1d1c19]">
-              Monitoring Stasiun TPST
-            </h1>
-          </div>
-          <div className="flex items-center gap-2 text-xs font-gt-mono">
-            <span className="hidden sm:inline text-[#84827a]">{user?.name} ({user?.role})</span>
-            <Link
-              href="/petugas"
-              className="px-2.5 py-1 border border-[#1d1c19] text-[11px] font-medium hover:bg-[#1d1c19] hover:text-white transition"
-            >
-              Input Setoran →
-            </Link>
-          </div>
-        </div>
-      </header>
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden opacity-10 mix-blend-multiply">
+        <video
+          src="/films/signal.mp4"
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="h-full w-full object-cover"
+        />
+      </div>
 
-      <main className="max-w-5xl mx-auto px-4 sm:px-8 pt-6 space-y-6">
-        {/* STATIONS SELECTOR & STATUS CARDS */}
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <span className="font-gt-mono text-[10px] uppercase text-[#84827a] tracking-wider">
-              DAFTAR STASIUN AKTIF ({stations.length})
-            </span>
-            <div className="flex items-center gap-1.5 text-[10px] font-gt-mono">
-              <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>LIVE REFRESH 4S</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {stations.map((st) => {
-              const isSelected = st.id === selectedStationId;
-              const isOnline = st.isOnline;
-              const statusColor =
-                st.status === "BAHAYA"
-                  ? "border-red-600 bg-red-50 text-red-950"
-                  : st.status === "WASPADA"
-                  ? "border-amber-500 bg-amber-50 text-amber-950"
-                  : "border-[#1d1c19]/20 bg-white text-[#1d1c19]";
-
-              return (
-                <div
-                  key={st.id}
-                  onClick={() => setSelectedStationId(st.id)}
-                  className={`p-4 border-2 transition cursor-pointer relative ${statusColor} ${
-                    isSelected ? "ring-2 ring-[#1d1c19]" : "opacity-90 hover:opacity-100"
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-gt-mono text-xs font-bold tracking-wider uppercase">
-                      {st.deviceId} &middot; {st.name}
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`size-2 rounded-full ${
-                          isOnline ? "bg-emerald-500" : "bg-zinc-400"
-                        }`}
-                      />
-                      <span className="font-gt-mono text-[10px] font-bold">
-                        {isOnline ? "ONLINE" : "OFFLINE"}
-                      </span>
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-[#55534c] line-clamp-1 mb-3">{st.lokasi}</p>
-
-                  <div className="grid grid-cols-3 gap-2 border-t border-current/15 pt-2 text-center">
-                    <div>
-                      <span className="text-[10px] font-gt-mono uppercase block text-[#84827a]">
-                        Suhu
-                      </span>
-                      <span className="text-base font-bold font-mono">
-                        {st.latestReading ? `${st.latestReading.temp.toFixed(1)}°C` : "-"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-gt-mono uppercase block text-[#84827a]">
-                        Asap/Gas
-                      </span>
-                      <span className="text-base font-bold font-mono">
-                        {st.latestReading ? `${st.latestReading.smoke} PPM` : "-"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-gt-mono uppercase block text-[#84827a]">
-                        Status
-                      </span>
-                      <span
-                        className={`text-xs font-bold font-gt-mono uppercase px-1.5 py-0.5 inline-block mt-0.5 ${
-                          st.status === "BAHAYA"
-                            ? "bg-red-600 text-white"
-                            : st.status === "WASPADA"
-                            ? "bg-amber-500 text-black"
-                            : "bg-emerald-600 text-white"
-                        }`}
-                      >
-                        {st.status}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* SELECTED STATION TELEMETRY DETAIL & CONTROLS */}
-        {selectedStation && (
-          <section className="bg-white border border-[#1d1c19]/15 p-4 sm:p-6 space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1d1c19]/10 pb-4">
+      {/* ----- ALERT BANNER (SYMMETRICAL) ----- */}
+      {isSimulatedFire && (
+        <aside
+          role="alert"
+          className="sticky top-0 inset-x-0 z-40 bg-[#b91c1c] text-white px-4 sm:px-6 lg:px-8 py-3 shadow-xl animate-pulse"
+        >
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 font-gt-mono">
+            <div className="flex items-center gap-3">
+              <div className="size-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                <Flame className="size-4 text-white" />
+              </div>
               <div>
-                <span className="font-gt-mono text-[10px] uppercase text-[#84827a] tracking-wider block">
-                  TELEMETRI DETAIL // {selectedStation.deviceId}
-                </span>
-                <h2 className="text-lg font-bold text-[#1d1c19]">{selectedStation.name}</h2>
-                <p className="text-xs text-[#55534c] font-mono mt-0.5">
-                  x-api-key: {selectedStation.apiKey}
+                <p className="text-xs sm:text-sm font-bold uppercase tracking-wider">
+                  BAHAYA TINGGI: ANOMALI SUHU &amp; GAS DI {currentStationInfo.name}!
+                </p>
+                <p className="text-[11px] text-white/90 leading-tight">
+                  Suhu 58.4°C &bull; Gas 485 PPM. Segera aktifkan Choke Mode pemutus suplai oksigen.
                 </p>
               </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    setThresholdForm({
-                      tempWarn: selectedStation.tempWarnThreshold,
-                      tempDanger: selectedStation.tempDangerThreshold,
-                      smokeWarn: selectedStation.smokeWarnThreshold,
-                      smokeDanger: selectedStation.smokeDangerThreshold,
-                    });
-                    setThresholdModal(true);
-                  }}
-                  className="px-3 py-1.5 border border-[#1d1c19] text-xs font-medium hover:bg-[#1d1c19] hover:text-white transition"
-                >
-                  ⚙ Atur Ambang Batas
-                </button>
-              </div>
             </div>
+            <button
+              onClick={() => handleToggleChoke(true)}
+              className="bg-white text-[#b91c1c] text-xs font-bold uppercase px-4 py-2 hover:bg-neutral-100 transition whitespace-nowrap min-h-[40px] cursor-pointer shadow-xs active:scale-95"
+            >
+              Kunci Katup Sekarang
+            </button>
+          </div>
+        </aside>
+      )}
 
-            {/* QUICK HARDWARE SIMULATOR BAR */}
-            <div className="bg-[#f2f1ed] p-3 border border-[#1d1c19]/15 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-gt-mono text-[10px] uppercase font-bold text-[#55534c]">
-                  SIMULATOR INGEST IOT (DEMO JURI TANPA HARDWARE)
-                </span>
-                <span className="text-[10px] font-mono text-[#84827a]">
-                  POST /api/ingest
-                </span>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  onClick={() => handleTriggerSim("normal")}
-                  className="py-1.5 bg-white border border-emerald-600 text-emerald-800 text-xs font-semibold hover:bg-emerald-50 active:scale-95 transition"
-                >
-                  🟢 Kirim Normal (31°C)
-                </button>
-                <button
-                  onClick={() => handleTriggerSim("warning")}
-                  className="py-1.5 bg-white border border-amber-600 text-amber-800 text-xs font-semibold hover:bg-amber-50 active:scale-95 transition"
-                >
-                  🟡 Kirim Waspada (48°C)
-                </button>
-                <button
-                  onClick={() => handleTriggerSim("danger")}
-                  className="py-1.5 bg-red-600 text-white text-xs font-semibold hover:bg-red-700 active:scale-95 transition"
-                >
-                  🔴 Kirim Bahaya (64°C)
-                </button>
-              </div>
-            </div>
-
-            {/* CHART 1 HOUR / 24 HOURS */}
+      {/* ----- MAIN WORKSPACE (SEIMBANG & SYMMETRICAL) ----- */}
+      <div className="relative z-10 pt-16 sm:pt-24 pb-32 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-6">
+        {/* HEADER BAR */}
+        <header className="bg-white/90 border border-[#1d1c19]/15 p-6 backdrop-blur-sm shadow-xs">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1d1c19]/10 pb-4">
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-gt-mono text-xs font-bold uppercase tracking-wider text-[#1d1c19]">
-                  Grafik Riwayat Sensor ({readingsHistory.length} data poin)
-                </span>
-                <div className="flex border border-[#1d1c19]/20 font-gt-mono text-xs">
-                  <button
-                    onClick={() => setHistoryRange(1)}
-                    className={`px-3 py-1 ${
-                      historyRange === 1 ? "bg-[#1d1c19] text-white" : "hover:bg-zinc-100"
-                    }`}
-                  >
-                    1 Jam
-                  </button>
-                  <button
-                    onClick={() => setHistoryRange(24)}
-                    className={`px-3 py-1 ${
-                      historyRange === 24 ? "bg-[#1d1c19] text-white" : "hover:bg-zinc-100"
-                    }`}
-                  >
-                    24 Jam
-                  </button>
-                </div>
+              <div className="flex items-center gap-2 font-gt-mono text-[11px] text-[#015186] font-semibold uppercase tracking-wider mb-1">
+                <span
+                  className={`size-2 rounded-full ${
+                    isSimulatedFire ? "bg-[#b91c1c] animate-ping" : "bg-emerald-600 animate-pulse"
+                  }`}
+                />
+                <span>STASIUN SENSOR AKTIF // {currentStationInfo.zone}</span>
               </div>
-
-              {/* Minimalist SVG Sparkline / Bar Graph */}
-              <div className="h-44 border border-[#1d1c19]/15 bg-[#fbfbfa] p-3 flex flex-col justify-between">
-                <div className="flex items-center justify-between text-[10px] font-mono text-[#84827a]">
-                  <span>Suhu Termal (°C) & Asap (PPM)</span>
-                  <span>Batas Bahaya: {selectedStation.tempDangerThreshold}°C</span>
-                </div>
-
-                <div className="h-28 flex items-end gap-1 overflow-x-auto pt-4">
-                  {readingsHistory.map((r, idx) => {
-                    const heightPercent = Math.min(100, Math.max(10, (r.temp / 70) * 100));
-                    const isDanger = r.temp >= selectedStation.tempDangerThreshold;
-                    const isWarn = r.temp >= selectedStation.tempWarnThreshold;
-                    const barColor = isDanger
-                      ? "bg-red-600"
-                      : isWarn
-                      ? "bg-amber-500"
-                      : "bg-[#1d1c19]";
-
-                    return (
-                      <div
-                        key={idx}
-                        className="flex-1 min-w-[6px] group relative flex flex-col items-center"
-                      >
-                        <div
-                          style={{ height: `${heightPercent}%` }}
-                          className={`w-full rounded-t-sm transition-all ${barColor}`}
-                        />
-                        {/* Tooltip on hover */}
-                        <div className="opacity-0 group-hover:opacity-100 pointer-events-none absolute bottom-full mb-1 z-20 bg-black text-white text-[9px] p-1 whitespace-nowrap font-mono">
-                          {r.temp}°C | {r.smoke} PPM
-                          <br />
-                          {new Date(r.createdAt).toLocaleTimeString("id-ID")}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="flex items-center justify-between text-[10px] font-mono text-[#84827a] pt-1 border-t border-[#1d1c19]/10">
-                  <span>
-                    Mulai:{" "}
-                    {readingsHistory[0]
-                      ? new Date(readingsHistory[0].createdAt).toLocaleTimeString("id-ID")
-                      : "-"}
-                  </span>
-                  <span>
-                    Terkini:{" "}
-                    {selectedStation.latestReading
-                      ? new Date(selectedStation.latestReading.createdAt).toLocaleTimeString("id-ID")
-                      : "-"}
-                  </span>
-                </div>
-              </div>
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#1d1c19]">
+                Pusat Kendali Telemetri &amp; Mitigasi Kebakaran
+              </h1>
             </div>
 
-            {/* ACTIVE ALERTS TABLE */}
-            <div>
-              <span className="font-gt-mono text-xs font-bold uppercase tracking-wider text-[#1d1c19] block mb-2">
-                Daftar Peringatan Aktif ({selectedStation.alerts?.length || 0})
+            <div className="flex flex-wrap items-center gap-2 font-gt-mono text-xs">
+              <button
+                onClick={toggleFireSimulation}
+                className={`py-2 px-3.5 text-xs font-bold tracking-wider uppercase border transition cursor-pointer flex items-center gap-2 active:scale-95 ${
+                  isSimulatedFire
+                    ? "border-[#b91c1c] bg-[#b91c1c] text-white hover:bg-red-700 shadow-sm"
+                    : "border-[#1d1c19]/30 bg-[#f2f1ed] text-[#1d1c19] hover:border-[#b91c1c] hover:text-[#b91c1c]"
+                }`}
+              >
+                <Flame className="size-3.5" />
+                <span>{isSimulatedFire ? "Hentikan Simulasi" : "Uji Lonjakan Bahaya"}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsWaitingSensor(!isWaitingSensor);
+                  setLogs((prev) => [
+                    `[${new Date().toLocaleTimeString()}] Mode pembacaan dialihkan ke ${
+                      !isWaitingSensor ? "siaga alat fisik" : "simulasi aktif"
+                    }.`,
+                    ...prev.slice(0, 15),
+                  ]);
+                }}
+                className={`py-2 px-3 text-xs border transition cursor-pointer flex items-center gap-1.5 active:scale-95 ${
+                  isWaitingSensor
+                    ? "border-[#015186] bg-[#015186] text-white font-bold"
+                    : "border-[#1d1c19]/25 bg-white text-[#55534c] hover:border-[#1d1c19]"
+                }`}
+              >
+                <SlidersHorizontal className="size-3.5" />
+                <span>{isWaitingSensor ? "Mode Alat Fisik" : "Mode Simulasi"}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* STATION SELECTOR */}
+          <div className="pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2 font-gt-mono text-xs overflow-x-auto pb-1 sm:pb-0">
+              <span className="text-[10px] text-[#84827a] uppercase font-bold tracking-wider shrink-0">
+                Pilih Stasiun:
               </span>
+              {STATIONS.map((st) => {
+                const isSelected = activeStation === st.id;
+                return (
+                  <button
+                    key={st.id}
+                    onClick={() => handleSelectStation(st)}
+                    className={`py-1.5 px-3 text-xs uppercase tracking-wider border transition cursor-pointer flex items-center gap-1.5 active:scale-95 shrink-0 ${
+                      isSelected
+                        ? "border-[#1d1c19] bg-[#1d1c19] text-[#f2f1ed] font-bold shadow-xs"
+                        : "border-[#1d1c19]/15 bg-white text-[#55534c] hover:border-[#1d1c19]/50"
+                    }`}
+                  >
+                    <span>{st.name}</span>
+                    <span className="text-[10px] opacity-60">({st.id.slice(-2)})</span>
+                  </button>
+                );
+              })}
+            </div>
 
-              {selectedStation.alerts && selectedStation.alerts.length > 0 ? (
-                <div className="space-y-2">
-                  {selectedStation.alerts.map((alt) => (
+            <div className="flex items-center gap-1.5 font-gt-mono text-[10px] text-[#84827a] shrink-0">
+              <Radio className="size-3 text-emerald-600 animate-pulse" />
+              <span>Sinkronisasi:</span>
+              <span className="font-semibold text-[#1d1c19]">{lastUpdated}</span>
+            </div>
+          </div>
+        </header>
+
+        {/* 12-COLUMN COMMAND CENTER GRID */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* ----- KOLOM KIRI (7 KEBUTUHAN UTAMA) ----- */}
+          <div className="lg:col-span-7 space-y-6">
+            {/* PRIMARY STATUS CARD */}
+            <div
+              className={`border p-6 transition-all shadow-xs ${
+                isSimulatedFire
+                  ? "border-[#b91c1c] bg-red-50 text-red-950"
+                  : "border-emerald-700/30 bg-emerald-50/70 text-emerald-950"
+              }`}
+            >
+              <div className="flex items-start gap-4">
+                <div
+                  className={`size-12 flex items-center justify-center shrink-0 border ${
+                    isSimulatedFire
+                      ? "border-[#b91c1c] bg-[#b91c1c] text-white"
+                      : "border-emerald-700 bg-emerald-700 text-white"
+                  }`}
+                >
+                  {isSimulatedFire ? (
+                    <AlertTriangle className="size-6 stroke-[2]" />
+                  ) : (
+                    <ShieldCheck className="size-6 stroke-[2]" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2 font-gt-mono">
+                    <span className="text-[10px] uppercase font-bold tracking-widest opacity-75">
+                      ANALISIS SISTEM OTOMASI
+                    </span>
+                    <span className="text-[11px] font-bold uppercase">
+                      {isSimulatedFire ? "SIAGA 1 (KRITIS)" : "KONDISI NORMAL"}
+                    </span>
+                  </div>
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight mt-0.5">
+                    {isSimulatedFire
+                      ? "Bahaya: Lonjakan Suhu & Akumulasi Gas Metana"
+                      : "Aman: Kondisi Kompartemen Sampah Terkendali"}
+                  </h2>
+                  <p className="text-xs opacity-90 mt-1 leading-relaxed">
+                    {isSimulatedFire
+                      ? "Suhu melampaui ambang batas 50°C. Segera tutup katup isolasi oksigen untuk memadamkan potensi nyala api."
+                      : "Sirkulasi udara stabil. Parameter thermal dan sensor gas organik berada dalam toleransi aman."}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* TELEMETRY METRICS 4-STAT GRID */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-gt-mono">
+              <div className="border border-[#1d1c19]/15 bg-white p-4 shadow-xs hover:border-[#1d1c19]/40 transition">
+                <div className="flex items-center justify-between text-[#84827a] mb-1">
+                  <span className="text-[10px] uppercase tracking-wider">Suhu Sensor</span>
+                  <Activity className="size-3" />
+                </div>
+                <p className="text-2xl font-bold text-[#1d1c19]">
+                  {tempData[tempData.length - 1]}°C
+                </p>
+                <span className="text-[10px] text-[#84827a] block mt-0.5">
+                  Batas Aman: &lt;45°C
+                </span>
+              </div>
+
+              <div className="border border-[#1d1c19]/15 bg-white p-4 shadow-xs hover:border-[#1d1c19]/40 transition">
+                <div className="flex items-center justify-between text-[#84827a] mb-1">
+                  <span className="text-[10px] uppercase tracking-wider">Gas Metana</span>
+                  <Activity className="size-3" />
+                </div>
+                <p className="text-2xl font-bold text-[#1d1c19]">
+                  {gasData[gasData.length - 1]} <span className="text-xs font-normal">PPM</span>
+                </p>
+                <span className="text-[10px] text-[#84827a] block mt-0.5">
+                  Batas Aman: &lt;350 PPM
+                </span>
+              </div>
+
+              <div className="border border-[#1d1c19]/15 bg-white p-4 shadow-xs hover:border-[#1d1c19]/40 transition">
+                <div className="flex items-center justify-between text-[#84827a] mb-1">
+                  <span className="text-[10px] uppercase tracking-wider">Posisi Servo</span>
+                  <SlidersHorizontal className="size-3" />
+                </div>
+                <p className="text-2xl font-bold text-[#1d1c19]">
+                  {isChoked ? "0°" : "90°"}
+                </p>
+                <span className="text-[10px] text-[#84827a] block mt-0.5">
+                  {isChoked ? "Kedap Udara" : "Sirkulasi Terbuka"}
+                </span>
+              </div>
+
+              <div className="border border-[#1d1c19]/15 bg-white p-4 shadow-xs hover:border-[#1d1c19]/40 transition">
+                <div className="flex items-center justify-between text-[#84827a] mb-1">
+                  <span className="text-[10px] uppercase tracking-wider">Koneksi IoT</span>
+                  <CheckCircle2 className="size-3 text-emerald-600" />
+                </div>
+                <p className="text-2xl font-bold text-emerald-800">LTE</p>
+                <span className="text-[10px] text-[#84827a] block mt-0.5">
+                  Ping 3.5s Aktif
+                </span>
+              </div>
+            </div>
+
+            {/* INTERACTIVE SPARKLINE THERMAL CHART */}
+            <div className="border border-[#1d1c19]/15 bg-white p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between font-gt-mono text-xs border-b border-[#1d1c19]/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="size-1.5 rounded-full bg-[#1d1c19]" />
+                  <span className="font-bold uppercase tracking-wider text-[#1d1c19]">
+                    Tren Pengukuran Suhu (Klik Batang untuk Inspeksi)
+                  </span>
+                </div>
+                <span className="text-[10px] text-[#84827a]">5 Sampel Terakhir</span>
+              </div>
+
+              <div className="h-32 flex items-end gap-3 pt-4 px-2 font-gt-mono">
+                {tempData.map((val, idx) => {
+                  const heightPercent = Math.min(100, Math.max(15, (val / 65) * 100));
+                  const isHigh = val >= 45;
+                  const isSelected = selectedBarIdx === idx;
+                  return (
                     <div
-                      key={alt.id}
-                      className={`p-3 border flex items-center justify-between gap-3 text-xs ${
-                        alt.level === "BAHAYA"
-                          ? "border-red-500 bg-red-50 text-red-900"
-                          : "border-amber-500 bg-amber-50 text-amber-900"
+                      key={idx}
+                      onClick={() => setSelectedBarIdx(isSelected ? null : idx)}
+                      className={`flex-1 flex flex-col items-center gap-2 h-full justify-end cursor-pointer group p-1 transition ${
+                        isSelected ? "bg-[#f2f1ed]" : "hover:bg-zinc-50"
                       }`}
                     >
-                      <div>
-                        <span className="font-bold uppercase font-gt-mono">
-                          [{alt.level}] {alt.type} ANOMALI
-                        </span>
-                        <p className="text-[11px] mt-0.5">
-                          Nilai terbaca: {alt.value} &middot; Terdeteksi:{" "}
-                          {new Date(alt.createdAt).toLocaleTimeString("id-ID")}
-                        </p>
-                      </div>
-
-                      <button
-                        onClick={() => handleResolveAlert(alt.id)}
-                        disabled={resolvingId === alt.id}
-                        className="px-3 py-1.5 bg-[#1d1c19] text-white text-[11px] font-semibold hover:bg-black transition whitespace-nowrap cursor-pointer"
-                      >
-                        {resolvingId === alt.id ? "Memproses..." : "Tandai Selesai ✓"}
-                      </button>
+                      <span className={`text-[10px] font-bold ${isSelected ? "text-[#015186]" : "text-[#55534c]"}`}>
+                        {val}°
+                      </span>
+                      <div
+                        style={{ height: `${heightPercent}%` }}
+                        className={`w-full transition-all duration-300 ${
+                          isHigh ? "bg-[#b91c1c]" : isSelected ? "bg-[#015186]" : "bg-[#1d1c19] group-hover:bg-[#015186]"
+                        }`}
+                      />
+                      <span className="text-[9px] text-[#84827a]">T-{5 - idx}</span>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="p-4 border border-[#1d1c19]/15 text-center text-xs text-[#55534c] bg-[#fbfbfa]">
-                  Tidak ada anomali atau bahaya aktif pada stasiun ini. Kondisi wadah terpantau AMAN.
+                  );
+                })}
+              </div>
+
+              {selectedBarIdx !== null && (
+                <div className="p-3 bg-[#fbfbfa] border border-[#1d1c19]/15 text-xs font-gt-mono flex justify-between items-center animate-fade-in">
+                  <span>
+                    Sampel T-{5 - selectedBarIdx}: <strong>{tempData[selectedBarIdx]}°C</strong> &bull; Gas: <strong>{gasData[selectedBarIdx]} PPM</strong>
+                  </span>
+                  <span className="text-[10px] text-[#015186] font-semibold">Toleransi Normal</span>
                 </div>
               )}
             </div>
-          </section>
-        )}
-      </main>
 
-      {/* MODAL CONFIG THRESHOLD */}
-      {thresholdModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white border-2 border-[#1d1c19] p-6 max-w-sm w-full font-sans space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-bold text-sm uppercase font-gt-mono">Atur Ambang Batas Sensor</h3>
-              <button onClick={() => setThresholdModal(false)} className="text-sm font-bold">✕</button>
+            {/* TERMINAL AUDIT LOG */}
+            <div className="border border-[#1d1c19]/15 bg-white p-6 shadow-xs space-y-3 font-gt-mono">
+              <div className="flex items-center justify-between border-b border-[#1d1c19]/10 pb-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <Terminal className="size-3.5 text-[#55534c]\" />
+                  <span className="font-bold uppercase tracking-wider text-[#1d1c19]">
+                    Log Aktivitas Sensor ({logs.length})
+                  </span>
+                </div>
+                <button
+                  onClick={() => setLogs([`[${new Date().toLocaleTimeString()}] Log di-refresh.`])}
+                  className="text-[10px] text-[#84827a] hover:text-[#1d1c19] flex items-center gap-1 cursor-pointer"
+                >
+                  <RotateCcw className="size-3" /> Bersihkan
+                </button>
+              </div>
+
+              <div className="h-44 overflow-y-auto space-y-2 pr-1 text-xs">
+                {logs.map((log, index) => (
+                  <div
+                    key={index}
+                    className="p-2.5 bg-[#fbfbfa] border border-[#1d1c19]/10 text-[11px] leading-relaxed flex items-start gap-2"
+                  >
+                    <span className="text-[#84827a] select-none">&rsaquo;</span>
+                    <span className="text-[#1d1c19]">{log}</span>
+                  </div>
+                ))}
+              </div>
             </div>
+          </div>
 
-            <form onSubmit={handleSaveThresholds} className="space-y-3 text-xs">
-              <div>
-                <label className="block text-[#55534c] mb-1">Suhu Waspada (°C)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={thresholdForm.tempWarn}
-                  onChange={(e) => setThresholdForm({ ...thresholdForm, tempWarn: Number(e.target.value) })}
-                  className="w-full h-9 px-2 border border-[#1d1c19]"
-                />
-              </div>
+          {/* ----- KOLOM KANAN (5 INSTRUMEN HARDWARE) ----- */}
+          <div className="lg:col-span-5 space-y-6">
+            {/* HARDWARE INSTRUMENT: CYLINDER GAUGE */}
+            <CylinderGauge
+              fillPercent={currentStationInfo.fill}
+              distanceCm={currentStationInfo.dist}
+              isWaitingSensor={isWaitingSensor}
+            />
 
-              <div>
-                <label className="block text-[#55534c] mb-1">Suhu Bahaya (°C)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={thresholdForm.tempDanger}
-                  onChange={(e) => setThresholdForm({ ...thresholdForm, tempDanger: Number(e.target.value) })}
-                  className="w-full h-9 px-2 border border-[#1d1c19]"
-                />
-              </div>
+            {/* HARDWARE INSTRUMENT: RISK SCORE GAUGE */}
+            <RiskScoreWidget
+              score={isSimulatedFire ? 88 : currentStationInfo.fill > 80 ? 45 : 12}
+              level={isSimulatedFire ? "HAZARD" : currentStationInfo.fill > 80 ? "WARNING" : "NORMAL"}
+              temperature={isSimulatedFire ? 58.4 : tempData[tempData.length - 1]}
+              gasPpm={isSimulatedFire ? 485 : gasData[gasData.length - 1]}
+              isWaitingSensor={isWaitingSensor}
+            />
 
-              <div>
-                <label className="block text-[#55534c] mb-1">Asap/Gas Waspada (PPM)</label>
-                <input
-                  type="number"
-                  value={thresholdForm.smokeWarn}
-                  onChange={(e) => setThresholdForm({ ...thresholdForm, smokeWarn: Number(e.target.value) })}
-                  className="w-full h-9 px-2 border border-[#1d1c19]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[#55534c] mb-1">Asap/Gas Bahaya (PPM)</label>
-                <input
-                  type="number"
-                  value={thresholdForm.smokeDanger}
-                  onChange={(e) => setThresholdForm({ ...thresholdForm, smokeDanger: Number(e.target.value) })}
-                  className="w-full h-9 px-2 border border-[#1d1c19]"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-2.5 bg-[#1d1c19] text-white uppercase font-bold tracking-wider hover:bg-black transition mt-2"
-              >
-                Simpan Konfigurasi
-              </button>
-            </form>
+            {/* HARDWARE ACTUATOR: CHOKE MODE VALVE CONTROL */}
+            <ChokeModeControl
+              currentServoPosition={isChoked ? "0° Kedap Udara" : "90° Siaga Sirkulasi"}
+              onToggleChoke={handleToggleChoke}
+              isChoked={isChoked}
+              isWaitingSensor={isWaitingSensor}
+            />
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

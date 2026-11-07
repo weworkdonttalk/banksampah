@@ -91,7 +91,7 @@ export default function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 inset-x-0 z-40 bg-[#1d1c19] text-[#f2f1ed] border-t border-white/10 pb-[env(safe-area-inset-bottom)]"
+      className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-[#1d1c19] text-[#f2f1ed] border-t border-white/10 pb-[env(safe-area-inset-bottom)]"
       aria-label="Navigasi Utama"
     >
       <div className="max-w-md mx-auto grid grid-cols-5 h-16 items-center px-1">
