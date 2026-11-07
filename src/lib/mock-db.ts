@@ -576,7 +576,14 @@ function initSeed(): MockDB {
 }
 
 export function getMockDB(): MockDB {
-  if (!global.__ECOSORT_MOCK_DB__) {
+  if (
+    !global.__ECOSORT_MOCK_DB__ ||
+    !Array.isArray(global.__ECOSORT_MOCK_DB__.depositSessions) ||
+    !Array.isArray(global.__ECOSORT_MOCK_DB__.stationEvents) ||
+    !Array.isArray(global.__ECOSORT_MOCK_DB__.stations) ||
+    !Array.isArray(global.__ECOSORT_MOCK_DB__.ledger) ||
+    !Array.isArray(global.__ECOSORT_MOCK_DB__.wasteTypes)
+  ) {
     global.__ECOSORT_MOCK_DB__ = initSeed();
   }
   return global.__ECOSORT_MOCK_DB__;

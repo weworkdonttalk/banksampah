@@ -57,15 +57,15 @@ interface CitizenSessionHistory {
 }
 
 const STATIONS: StationItem[] = [
-  { id: "st_001", deviceId: "ST-001", name: "Stasiun TPST Terpadu Kayumas", lokasi: "Banjar Kayumas Kaja" },
+  { id: "st_001", deviceId: "ST-001", name: "Stasiun TPST Terpadu Kayumas", lokasi: "Kawasan Kayumas Kaja" },
   { id: "st_002", deviceId: "ST-002", name: "Stasiun TPS Seminyak Coastal", lokasi: "Depot Seminyak" },
 ];
 
 const VOUCHERS = [
   { id: "V-PLN-20K", title: "Token Listrik PLN Rp 20.000", costPoints: 20000, category: "Listrik", issuer: "PLN Distribusi Bali" },
   { id: "V-PLS-10K", title: "Pulsa Seluler Rp 10.000", costPoints: 10000, category: "Pulsa", issuer: "Telkomsel" },
-  { id: "V-SEMBAKO", title: "Beras Banjar Sejahtera 2.5 kg", costPoints: 35000, category: "Pangan", issuer: "Koperasi Banjar Kayumas" },
-  { id: "V-PDAM", title: "Iuran Air Swakelola Banjar", costPoints: 15000, category: "Iuran", issuer: "LPD Adat Kayumas" },
+  { id: "V-EMONEY-25K", title: "Saldo E-Money (GoPay / OVO / Dana) Rp 25.000", costPoints: 25000, category: "E-Money", issuer: "Dompet Digital" },
+  { id: "V-EMONEY-50K", title: "Saldo E-Money (GoPay / OVO / Dana) Rp 50.000", costPoints: 50000, category: "E-Money", issuer: "Dompet Digital" },
 ];
 
 export default function CircularExchangePage() {
@@ -377,7 +377,7 @@ export default function CircularExchangePage() {
           <div>
             <div className="flex items-center gap-2 font-gt-mono text-[11px] text-[#015186] font-semibold uppercase tracking-wider mb-1">
               <span className="size-2 rounded-full bg-[#1d1c19]" />
-              <span>BANK SAMPAH IOT // BANJAR KAYUMAS KAJA</span>
+              <span>BANK SAMPAH IOT // SISTEM PENGELOLAAN SAMPAH CERDAS</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#1d1c19]">
               Setor Sampah Cerdas &amp; Verifikasi AI
@@ -401,44 +401,44 @@ export default function CircularExchangePage() {
           {/* ----- KOLOM KIRI (5/12 NASABAH & STATUS SESI IOT) ----- */}
           <div className="lg:col-span-5 space-y-6">
             {/* CARD 1: MEMBER PASS & SALDO */}
-            <div className="bg-[#1d1c19] text-[#f2f1ed] border border-[#1d1c19] p-6 shadow-sm space-y-6">
-              <div className="flex items-center justify-between border-b border-white/15 pb-4 font-gt-mono text-xs">
+            <div className="bg-white/95 text-[#1d1c19] border border-[#1d1c19]/15 p-6 shadow-xs space-y-6">
+              <div className="flex items-center justify-between border-b border-[#1d1c19]/10 pb-4 font-gt-mono text-xs">
                 <span className="text-[#84827a] tracking-widest uppercase text-[10px]">
-                  KARTU DIGITAL WARGA
+                  KARTU DIGITAL PENGGUNA
                 </span>
-                <span className="flex items-center gap-1 text-emerald-400 text-[10px] tracking-wider font-bold">
+                <span className="flex items-center gap-1 text-emerald-600 text-[10px] tracking-wider font-bold">
                   <ShieldCheck className="size-3.5" />
                   <span>TERHUBUNG IOT</span>
                 </span>
               </div>
 
               <div>
-                <span className="text-[11px] font-gt-mono text-[#84827a] block">Nama Warga:</span>
-                <h2 className="text-2xl font-bold tracking-tight text-[#f2f1ed]">I Wayan Sudiarta</h2>
-                <span className="font-gt-mono text-xs text-[#84827a] mt-0.5 block">
-                  Banjar Kayumas Kaja &bull; Denpasar Timur
+                <span className="text-[11px] font-gt-mono text-[#84827a] block">Nama:</span>
+                <h2 className="text-2xl font-bold tracking-tight text-[#1d1c19]">I Wayan Sudiarta</h2>
+                <span className="font-gt-mono text-xs text-[#55534c] mt-0.5 block">
+                  Denpasar Timur &bull; Pengguna Aktif
                 </span>
               </div>
 
-              {/* SALDO FLAT & TARIF BANJAR */}
-              <div className="grid grid-cols-2 gap-3 pt-2 font-gt-mono border-t border-white/10">
-                <div className="bg-white/5 border border-white/10 p-3.5">
+              {/* SALDO FLAT & TARIF SAMPAH */}
+              <div className="grid grid-cols-2 gap-3 pt-2 font-gt-mono border-t border-[#1d1c19]/10">
+                <div className="bg-[#f2f1ed]/80 border border-[#1d1c19]/10 p-3.5">
                   <span className="text-[10px] text-[#84827a] uppercase block">Saldo Terkumpul</span>
-                  <p className="text-2xl sm:text-3xl font-bold text-white mt-0.5">
+                  <p className="text-2xl sm:text-3xl font-bold text-[#1d1c19] mt-0.5">
                     Rp {balance.toLocaleString("id-ID")}
                   </p>
-                  <span className="text-[10px] text-emerald-400 block mt-1">
+                  <span className="text-[10px] text-emerald-600 font-semibold block mt-1">
                     Atomic Point Ledger
                   </span>
                 </div>
 
-                <div className="bg-white/5 border border-white/10 p-3.5">
-                  <span className="text-[10px] text-[#84827a] uppercase block">Tarif Flat Banjar</span>
-                  <p className="text-xs font-bold text-white mt-1">
-                    Organik: <span className="text-emerald-400">Rp {tariff.organicRate.toLocaleString("id-ID")}</span>
+                <div className="bg-[#f2f1ed]/80 border border-[#1d1c19]/10 p-3.5">
+                  <span className="text-[10px] text-[#84827a] uppercase block">Tarif Flat Sampah</span>
+                  <p className="text-xs font-bold text-[#1d1c19] mt-1">
+                    Organik: <span className="text-emerald-700">Rp {tariff.organicRate.toLocaleString("id-ID")}</span>
                   </p>
-                  <p className="text-xs font-bold text-white mt-0.5">
-                    Anorganik: <span className="text-[#015186] text-blue-300">Rp {tariff.inorganicRate.toLocaleString("id-ID")}</span>
+                  <p className="text-xs font-bold text-[#1d1c19] mt-0.5">
+                    Anorganik: <span className="text-[#015186]">Rp {tariff.inorganicRate.toLocaleString("id-ID")}</span>
                   </p>
                   <span className="text-[9px] text-[#84827a] block mt-1">Flat per sesi setoran</span>
                 </div>
@@ -449,7 +449,7 @@ export default function CircularExchangePage() {
                 <button
                   type="button"
                   onClick={() => handleStartSession()}
-                  className="bg-white text-[#1d1c19] py-3 px-3 text-xs font-bold uppercase tracking-wider hover:bg-neutral-100 transition cursor-pointer flex items-center justify-center gap-2 active:scale-95"
+                  className="bg-[#1d1c19] text-[#f2f1ed] py-3 px-3 text-xs font-bold uppercase tracking-wider hover:bg-black transition cursor-pointer flex items-center justify-center gap-2 active:scale-95 shadow-xs"
                 >
                   <Camera className="size-4" />
                   <span>Setor Sampah</span>
@@ -458,7 +458,7 @@ export default function CircularExchangePage() {
                 <button
                   type="button"
                   onClick={() => setDrawerMode("REDEEM")}
-                  className="border border-white/30 text-white py-3 px-3 text-xs font-bold uppercase tracking-wider hover:bg-white/10 transition cursor-pointer flex items-center justify-center gap-2 active:scale-95"
+                  className="border border-[#1d1c19]/25 bg-white text-[#1d1c19] py-3 px-3 text-xs font-bold uppercase tracking-wider hover:bg-[#1d1c19]/5 transition cursor-pointer flex items-center justify-center gap-2 active:scale-95 shadow-2xs"
                 >
                   <Ticket className="size-4" />
                   <span>Tukar Saldo</span>

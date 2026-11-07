@@ -516,6 +516,7 @@ export const dbService = {
       });
     }
     const mock = getMockDB();
+    if (!mock.depositSessions) mock.depositSessions = [];
     const session = mock.depositSessions
       .filter(
         (s) =>
@@ -574,6 +575,7 @@ export const dbService = {
     }
 
     const mock = getMockDB();
+    if (!mock.depositSessions) mock.depositSessions = [];
     const recentSessionsCount = mock.depositSessions.filter(
       (s) => s.citizenId === data.citizenId && s.createdAt >= oneHourAgo
     ).length;
@@ -894,6 +896,7 @@ export const dbService = {
       });
     }
     const mock = getMockDB();
+    if (!mock.depositSessions) mock.depositSessions = [];
     return mock.depositSessions
       .filter((s) => s.status === SessionStatus.NEEDS_REVIEW)
       .map((s) => {
@@ -1008,6 +1011,7 @@ export const dbService = {
       });
     }
     const mock = getMockDB();
+    if (!mock.depositSessions) mock.depositSessions = [];
     return mock.depositSessions
       .filter((s) => s.citizenId === citizenId)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
@@ -1305,7 +1309,8 @@ export const dbService = {
       return sessions;
     }
     const mock = getMockDB();
-    const stationIds = new Set(mock.stations.filter((s) => s.banjarId === banjarId).map((s) => s.id));
+    if (!mock.depositSessions) mock.depositSessions = [];
+    const stationIds = new Set((mock.stations || []).filter((s) => s.banjarId === banjarId).map((s) => s.id));
     return mock.depositSessions.filter((s) => stationIds.has(s.stationId));
   },
 };
