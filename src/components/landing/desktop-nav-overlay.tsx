@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Cormorant_Garamond } from "next/font/google";
 import gsap from "gsap";
 
@@ -27,6 +28,7 @@ const MENU_ITEMS: NavItem[] = [
 ];
 
 export default function DesktopNavOverlay() {
+  const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerBtnRef = useRef<HTMLButtonElement>(null);
@@ -222,10 +224,12 @@ export default function DesktopNavOverlay() {
       <div className="fixed top-8 left-6 lg:left-8 z-50 pointer-events-auto flex flex-col items-center gap-7">
         {/* Pear-style Mark Logo */}
         <Link
-          href="#top"
+          href="/"
           onClick={(e) => {
             if (isOpen) closeMenu();
-            handleNavClick(e as any, "#top", false);
+            if (pathname === "/") {
+              handleNavClick(e as any, "#top", false);
+            }
           }}
           className={`transition-colors duration-300 block outline-none ${
             isOpen ? "text-white" : "text-[#1d1c19] hover:opacity-75"
