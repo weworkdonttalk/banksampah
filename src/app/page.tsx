@@ -2,8 +2,15 @@
 
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import PearCanvas from "@/components/webgl/pear-canvas";
+import SmoothScrollProvider from "@/components/landing/smooth-scroll-provider";
 import { playSuccessChime } from "@/lib/audio-alert";
+
+const HeroThreeCanvas = dynamic(
+  () => import("@/components/landing/hero-three-canvas"),
+  { ssr: false }
+);
 
 interface FAQItem {
   id: number;
@@ -135,9 +142,11 @@ export default function PearLandingPage() {
   };
 
   return (
-    <div className="relative min-h-screen bg-[#f2f1ed] text-[#1d1c19] selection:bg-[#1d1c19] selection:text-[#f2f1ed]">
-      {/* 0. INTERACTIVE WEBGL CANVAS (GETLAYERS & PEAR FLUID SHADER) */}
-      <PearCanvas />
+    <SmoothScrollProvider>
+      <div className="relative min-h-screen bg-[#f2f1ed] text-[#1d1c19] selection:bg-[#1d1c19] selection:text-[#f2f1ed]">
+        {/* 0. INTERACTIVE WEBGL CANVAS (GETLAYERS & PEAR FLUID SHADER) */}
+        <PearCanvas />
+        <HeroThreeCanvas />
 
       {/* SVG Ink Dispersion Filter (authentic pear.no #inkf filter) */}
       <svg className="sr-only" aria-hidden="true">
@@ -231,15 +240,22 @@ export default function PearLandingPage() {
             Bukan TPA yang terus terbakar, melainkan solusi terukur untuk Banjar dan lingkungan Bali.
           </p>
 
-          <div className="mt-8">
-            <button
-              onClick={() => setShowApplyModal(true)}
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            <Link
+              href="/daftar-banjar"
               className="relative inline-flex items-center gap-3 border border-[#1d1c19] bg-[#1d1c19] text-[#f2f1ed] px-6 py-3.5 text-xs font-semibold tracking-wider uppercase overflow-hidden group shadow-md cursor-pointer active:scale-95"
             >
               <span className="cta-flood" />
               <span className="relative z-10">Daftarkan Banjar Anda</span>
               <span className="relative z-10 transition-transform group-hover:translate-x-1">→</span>
-            </button>
+            </Link>
+
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-2 border border-[#1d1c19]/30 bg-white/70 px-5 py-3.5 text-xs font-semibold tracking-wider uppercase text-[#1d1c19] hover:bg-white active:scale-95 transition"
+            >
+              Masuk Sistem →
+            </Link>
           </div>
         </div>
 
@@ -570,14 +586,17 @@ export default function PearLandingPage() {
                 NAVIGASI APLIKASI
               </span>
               <div className="space-y-1">
-                <Link href="/ops-hazard" className="block hover:text-white transition-colors">
-                  Pusat Kendali Bahaya
+                <Link href="/dashboard" className="block hover:text-white transition-colors">
+                  Monitoring IoT TPST
                 </Link>
-                <Link href="/circular-exchange" className="block hover:text-white transition-colors">
-                  Bursa Poin Warga
+                <Link href="/petugas" className="block hover:text-white transition-colors">
+                  Input Setoran Lapangan
                 </Link>
-                <Link href="/history" className="block hover:text-white transition-colors">
-                  Logistik Armada DLH
+                <Link href="/warga" className="block hover:text-white transition-colors">
+                  Tabungan & Saldo Warga
+                </Link>
+                <Link href="/admin/laporan" className="block hover:text-white transition-colors">
+                  Laporan & Statistik Banjar
                 </Link>
               </div>
             </div>
@@ -595,12 +614,12 @@ export default function PearLandingPage() {
               <span className="text-white uppercase tracking-widest block mb-3 font-bold">
                 KEMITRAAN BANJAR
               </span>
-              <button
-                onClick={() => setShowApplyModal(true)}
-                className="w-full min-h-[44px] border border-white/40 bg-white text-black py-2.5 font-bold uppercase tracking-wider hover:bg-zinc-200 transition cursor-pointer"
+              <Link
+                href="/daftar-banjar"
+                className="w-full min-h-[44px] border border-white/40 bg-white text-black py-2.5 font-bold uppercase tracking-wider hover:bg-zinc-200 transition text-center block"
               >
                 Daftar Banjar &rarr;
-              </button>
+              </Link>
             </div>
           </div>
 
@@ -702,6 +721,7 @@ export default function PearLandingPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </SmoothScrollProvider>
   );
 }

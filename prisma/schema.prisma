@@ -7,38 +7,200 @@ generator client {
   provider = "prisma-client-js"
 }
 
-model StationTelemetry {
+enum Role {
+  ADMIN_BANJAR
+  PETUGAS
+  WARGA
+}
+
+enum AlertLevel {
+  AMAN
+  WASPADA
+  BAHAYA
+}
+
+enum AlertStatus {
+  ACTIVE
+  RESOLVED
+}
+
+enum WasteCategory {
+  ORGANIK
+  ANORGANIK_PLASTIK
+  ANORGANIK_KERTAS
+  ANORGANIK_LOGAM
+  ANORGANIK_KACA
+  RESIDU
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Banjar {
+  id          String   @id @default(cuid())
+  kode        String   @unique
+  nama        String
+  alamat      String?
+  kecamatan   String   @default("Denpasar Selatan")
+  kabupaten   String   @default("Denpasar")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  stations    Station[]
+  wasteTypes  WasteType[]
+}
+
+model User {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  passwordHash String
+  name         String
+  phone        String?
+  role         Role        @default(WARGA)
+  banjarId     String
+  banjar       Banjar      @relation(fields: [banjarId], references: [id], onDelete: Cascade)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  // Relasi Bank Sampah
+  depositsRecorded Deposit[]     @relation("OperatorDeposits")
+  depositsReceived Deposit[]     @relation("CitizenDeposits")
+  withdrawals      Withdrawal[]
+  ledgerEntries    PointLedger[]
+
+  @@index([banjarId])
+  @@index([role])
+}
+
+model Station {
+  id              String          @id @default(cuid())
+  deviceId        String          @unique // e.g. "ST-001"
+  apiKey          String          @unique // x-api-key header
+  name            String
+  lokasi          String
+  banjarId        String
+  banjar          Banjar          @relation(fields: [banjarId], references: [id], onDelete: Cascade)
+  
+  // Ambang batas alert konfigurabel per stasiun
+  tempWarnThreshold  Float        @default(45.0)
+  tempDangerThreshold Float       @default(60.0)
+  smokeWarnThreshold Float        @default(300.0)
+  smokeDangerThreshold Float      @default(600.0)
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  readings        SensorReading[]
+  alerts          Alert[]
+
+  @@index([banjarId])
+  @@index([deviceId])
+}
+
+model SensorReading {
   id          String   @id @default(cuid())
   stationId   String
-  temperature Float
-  gasPpm      Float
-  fillPercent Float
-  servoState  String
+  station     Station  @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  temp        Float    // Suhu infrared / termal (°C)
+  smoke       Float    // Gas / smoke sensor (PPM / ADC)
+  humidity    Float?   // Kelembapan udara (%)
   createdAt   DateTime @default(now())
 
-  @@index([stationId])
+  @@index([stationId, createdAt])
+}
+
+model Alert {
+  id          String      @id @default(cuid())
+  stationId   String
+  station     Station     @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  type        String      // "TEMPERATURE" | "SMOKE" | "COMBINED"
+  level       AlertLevel  // WASPADA | BAHAYA
+  value       Float
+  status      AlertStatus @default(ACTIVE)
+  resolvedAt  DateTime?
+  resolvedBy  String?     // User ID or name
+  createdAt   DateTime    @default(now())
+
+  @@index([stationId, status])
   @@index([createdAt])
 }
 
-model DepositLog {
-  id          String   @id @default(cuid())
+model WasteType {
+  id          String        @id @default(cuid())
+  banjarId    String
+  banjar      Banjar        @relation(fields: [banjarId], references: [id], onDelete: Cascade)
+  kode        String        // e.g. "PET-01"
+  nama        String        // e.g. "Botol Plastik PET Bersih"
+  category    WasteCategory @default(ANORGANIK_PLASTIK)
+  pricePerKg  Int           // Rupiah per kg
+  unit        String        @default("kg")
+  active      Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  deposits    Deposit[]
+
+  @@unique([banjarId, kode])
+  @@index([banjarId])
+}
+
+model Deposit {
+  id           String        @id @default(cuid())
+  citizenId    String
+  citizen      User          @relation("CitizenDeposits", fields: [citizenId], references: [id], onDelete: Restrict)
+  operatorId   String
+  operator     User          @relation("OperatorDeposits", fields: [operatorId], references: [id], onDelete: Restrict)
+  wasteTypeId  String
+  wasteType    WasteType     @relation(fields: [wasteTypeId], references: [id], onDelete: Restrict)
+  weightKg     Float
+  pricePerKg   Int
+  totalAmount  Int           // weightKg * pricePerKg (Rupiah)
+  imageUrl     String?       // Foto sampah hasil scan / upload
+  aiPredicted  Boolean       @default(false)
+  notes        String?
+  createdAt    DateTime      @default(now())
+
+  ledgerEntry  PointLedger?
+
+  @@index([citizenId])
+  @@index([operatorId])
+  @@index([createdAt])
+}
+
+model PointLedger {
+  id          String      @id @default(cuid())
   userId      String
-  wasteType   String   // ORGANIC / INORGANIC
-  pointsEarned Int
-  co2SavedKg  Float
-  createdAt   DateTime @default(now())
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount      Int         // Positif (tambah saldo), negatif (tarik saldo)
+  type        String      // "DEPOSIT" | "WITHDRAWAL" | "ADJUSTMENT"
+  description String
+  depositId   String?     @unique
+  deposit     Deposit?    @relation(fields: [depositId], references: [id], onDelete: SetNull)
+  withdrawalId String?    @unique
+  withdrawal  Withdrawal? @relation(fields: [withdrawalId], references: [id], onDelete: SetNull)
+  createdAt   DateTime    @default(now())
 
   @@index([userId])
   @@index([createdAt])
 }
 
-model DispatchLog {
-  id          String   @id @default(cuid())
-  stationId   String
-  driverName  String
-  status      String   // EN_ROUTE / LOADING / COMPLETED / STANDBY
-  etaMinutes  Int
-  createdAt   DateTime @default(now())
+model Withdrawal {
+  id          String           @id @default(cuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount      Int              // Nominal rupiah yang dicairkan
+  status      WithdrawalStatus @default(PENDING)
+  notes       String?
+  processedAt DateTime?
+  processedBy String?
+  createdAt   DateTime         @default(now())
 
-  @@index([stationId])
+  ledgerEntry PointLedger?
+
+  @@index([userId])
+  @@index([status])
 }
