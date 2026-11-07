@@ -15,7 +15,7 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: "EcoSort AI — Bali Smart Waste & Hazard Mitigation",
   description:
-    "Solusi AI & IoT untuk deteksi dini bahaya kebakaran sampah, protokol Choke Mode, dan ekonomi sirkular desa adat Bali.",
+    "Solusi AI & IoT untuk deteksi dini bahaya kebakaran sampah, pemantauan sensor suhu, gas, asap, dan ekonomi sirkular desa adat Bali.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,

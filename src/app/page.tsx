@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import PearCanvas from "@/components/webgl/pear-canvas";
 import SmoothScrollProvider from "@/components/landing/smooth-scroll-provider";
@@ -21,21 +21,21 @@ interface FAQItem {
 const FAQS: FAQItem[] = [
   {
     id: 1,
-    question: "Berapa biaya implementasi EcoSort untuk Banjar / Kawasan?",
+    question: "Berapa biaya implementasi EcoSort untuk Desa Adat / Kawasan?",
     answer:
-      "Nol rupiah di awal dan tanpa tarif per jam. Kami mendanai perangkat keras IoT, kecerdasan buatan, dan pelatihan warga secara mandiri. Bagi hasil diambil dari nilai ekonomi daur ulang yang dihasilkan stasiun.",
+      "Nol rupiah di awal dan tanpa tarif bulanan. Kami mendanai perangkat keras IoT, kecerdasan buatan, dan pelatihan warga secara mandiri. Bagi hasil diambil dari nilai ekonomi daur ulang yang dihasilkan stasiun.",
   },
   {
     id: 2,
     question: "Bagaimana sistem membagi hasil nilai ekonomi sampah?",
     answer:
-      "Disepakati per kemitraan Banjar sebelum stasiun dipasang. Berlaku murni atas pertumbuhan tonase terpilah di atas batas dasar (baseline), langsung dikreditkan ke saldo digital warga.",
+      "Disepakati per kemitraan desa adat sebelum stasiun dipasang. Berlaku murni atas pertumbuhan tonase terpilah di atas batas dasar (baseline), langsung dikreditkan ke saldo digital warga.",
   },
   {
     id: 3,
-    question: "Bagaimana protokol Choke Mode memitigasi kebakaran TPA/TPS?",
+    question: "Bagaimana sensor mendeteksi potensi kebakaran di tempat sampah?",
     answer:
-      "Sensor suhu infrared dan sensor gas MQ membaca korelasi ΔT > 45°C dan gas mudah terbakar > 400 PPM secara real-time. Motor servo seketika mengunci kompartemen rapat 0° dalam 380ms guna memutus suplai oksigen.",
+      "Sensor suhu, gas, dan asap membaca kondisi lingkungan secara terus-menerus. Kenaikan suhu atau lonjakan gas dan asap langsung memicu peringatan otomatis ke dashboard dan petugas.",
   },
   {
     id: 4,
@@ -47,7 +47,7 @@ const FAQS: FAQItem[] = [
     id: 5,
     question: "Berapa lama waktu pemasangan hingga stasiun aktif beroperasi?",
     answer:
-      "Perangkat IoT mikro terkoneksi dalam hitungan hari melalui jaringan seluler 4G/LTE atau WiFi Banjar. Warga dapat langsung memindai kartu dan menukarkan sampah terpilah.",
+      "Perangkat IoT mikro terkoneksi dalam hitungan hari melalui jaringan seluler 4G/LTE atau WiFi desa adat. Warga dapat langsung memindai kartu dan menukarkan sampah terpilah.",
   },
 ];
 
@@ -216,7 +216,7 @@ export default function PearLandingPage() {
       {/* 2. MAIN STAGE: CHAPTER 1 — THE MODEL (#top & #model) */}
       <section
         id="model"
-        className="relative z-10 min-h-screen px-6 sm:px-12 lg:px-16 pt-12 sm:pt-28 md:pt-32 pb-24 max-w-5xl mx-auto flex flex-col justify-between"
+        className="relative z-10 min-h-screen px-6 sm:px-12 lg:px-16 pt-12 sm:pt-28 md:pt-32 pb-16 sm:pb-24 max-w-5xl mx-auto flex flex-col justify-between"
       >
         <div className="pt-0 sm:pt-4 md:pt-6">
           <div
@@ -237,7 +237,7 @@ export default function PearLandingPage() {
           <p
             className="mt-4 text-lg sm:text-2xl font-normal text-[#55534c] leading-snug max-w-2xl"
           >
-            Bukan TPA yang terus terbakar, melainkan solusi terukur untuk Banjar dan lingkungan Bali.
+            Bukan TPA yang terus terbakar, melainkan solusi terukur untuk desa adat dan lingkungan Bali.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-4">
@@ -261,14 +261,14 @@ export default function PearLandingPage() {
 
         {/* 3-Beat Rhythm Switcher & The Stand Column */}
         <div
-          className="mt-20 pt-10 border-t border-[#1d1c19]/15 grid grid-cols-1 md:grid-cols-12 gap-8 items-start"
+          className="mt-12 sm:mt-20 pt-8 sm:pt-10 border-t border-[#1d1c19]/15 grid grid-cols-1 md:grid-cols-12 gap-6 sm:gap-8 items-start"
         >
           {/* Left: 3-Beat Controls */}
           <div className="md:col-span-5 space-y-3 text-xl sm:text-2xl font-bold">
             {[
               { beat: 0, text: "Kami deteksi dini." },
-              { beat: 1, text: "Kami padamkan cepat." },
-              { beat: 2, text: "Bagi hasil untuk warga." },
+              { beat: 1, text: "Kami beri peringatan cepat." },
+              { beat: 2, text: "Kami pantau real-time." },
             ].map((b) => (
               <button
                 key={b.beat}
@@ -292,29 +292,33 @@ export default function PearLandingPage() {
                   activeBeat === 0 ? "beat-panel-active" : "beat-panel-inactive"
                 }`}
               >
-                Kami membangun stasiun IoT cerdas dengan sensor suhu infrared dan sensor gas MQ untuk mendeteksi potensi kebakaran TPA sebelum asap membumbung. Data dianalisis di level edge, membaca laju kenaikan termal secara presisi.
+                Sensor suhu, gas, dan asap di setiap stasiun EcoSort membaca kondisi lingkungan secara terus-menerus. Kenaikan suhu atau lonjakan gas dan asap langsung terdeteksi sebelum api sempat membesar.
               </p>
               <p
                 className={`font-gt-sans text-sm sm:text-base text-[#33322d] leading-relaxed font-normal beat-panel ${
                   activeBeat === 1 ? "beat-panel-active" : "beat-panel-inactive"
                 }`}
               >
-                Ketika anomali bahaya terdeteksi, protokol darurat Choke Mode seketika mengunci motor servo ke sudut 0° dalam waktu 380 milidetik. Pintu kompartemen kedap udara terisolasi total, memutus pasokan oksigen api seketika.
+                Saat nilai sensor melewati ambang batas, status berubah dari aman ke waspada atau bahaya. Peringatan langsung muncul di dashboard dan dikirim ke pengelola desa adat, lengkap dengan lokasi stasiun dan nilai sensornya.
               </p>
               <p
                 className={`font-gt-sans text-sm sm:text-base text-[#33322d] leading-relaxed font-normal beat-panel ${
                   activeBeat === 2 ? "beat-panel-active" : "beat-panel-inactive"
                 }`}
               >
-                Kami memilah sampah anorganik dan organik secara presisi, lalu membagi nilai rupiah daur ulang langsung ke saldo poin warga Banjar. Tanpa biaya awal, tanpa retribusi tambahan: jika sampah Bali tidak tertangani, kami tidak dibayar.
+                Data suhu, gas, dan asap tampil langsung di dashboard lewat HP maupun laptop, lengkap dengan grafik riwayat dan status alat online atau offline. Desa adat bisa memantau kondisi lingkungan kapan pun.
               </p>
             </div>
 
             <div className="pt-2 flex items-center justify-between font-gt-mono text-xs text-[#55534c] border-t border-[#1d1c19]/10">
               <span className="uppercase text-[10px] tracking-widest">
-                [ MODEL KEMITRAAN BANJAR &middot; ZERO RETAINER ]
+                {activeBeat === 0
+                  ? "[ SENSOR SUHU \u00B7 GAS \u00B7 ASAP ]"
+                  : activeBeat === 1
+                  ? "[ ALERT OTOMATIS \u00B7 DASHBOARD + TELEGRAM ]"
+                  : "[ MONITORING REAL-TIME \u00B7 RIWAYAT DATA ]"}
               </span>
-              <span className="text-[#015186] font-bold">100% HASIL TERBUKTI</span>
+              <span className="text-[#015186] font-bold">PANTAU REAL-TIME</span>
             </div>
           </div>
         </div>
@@ -323,7 +327,7 @@ export default function PearLandingPage() {
       {/* 3. SECTION: CHAPTER 2 — THE WORK (#work) */}
       <section
         id="work"
-        className="relative z-10 min-h-screen px-6 sm:px-12 lg:px-16 py-32 max-w-5xl mx-auto border-t border-[#1d1c19]/15"
+        className="relative z-10 min-h-screen px-6 sm:px-12 lg:px-16 py-16 sm:py-24 lg:py-32 max-w-5xl mx-auto border-t border-[#1d1c19]/15"
       >
         <div
           data-reveal="50"
@@ -372,19 +376,19 @@ export default function PearLandingPage() {
             className="reveal-card border border-[#1d1c19]/15 bg-[#f2f1ed]/80 backdrop-blur-sm p-6 flex flex-col justify-between group"
           >
             <span className="font-gt-mono text-[10px] uppercase tracking-widest text-[#84827a] block mb-4">
-              02 &middot; KATUP PENGAMAN DARURAT
+              02 &middot; DETEKSI SUHU, GAS &amp; ASAP
             </span>
             <div>
               <h3 className="text-lg font-bold text-[#1d1c19] mb-3 leading-snug">
-                Katup pemutus udara menutup rapat saat ada gas dan panas.
+                Peringatan otomatis saat nilai sensor melewati batas.
               </h3>
               <p className="font-gt-sans text-xs text-[#55534c] leading-relaxed">
-                Korelasi lonjakan suhu di atas 45°C dan konsentrasi gas metana di atas 400 PPM seketika menutup katup mekanik dalam 380 milidetik untuk menghentikan api.
+                Sensor suhu, gas, dan asap memantau kondisi lingkungan secara real-time. Lonjakan gas atau kenaikan suhu langsung memicu peringatan waspada dan bahaya ke dashboard pengelola.
               </p>
             </div>
             <div className="mt-6 pt-4 border-t border-[#1d1c19]/10 font-gt-mono text-[10px] text-[#015186] flex justify-between">
-              <span>RESPON: 380MS</span>
-              <span>KATUP 0° KEDAP</span>
+              <span>RESPON: REAL-TIME</span>
+              <span>SUHU · GAS · ASAP</span>
             </div>
           </div>
 
@@ -401,7 +405,7 @@ export default function PearLandingPage() {
                 Poin reward digital dan insentif nyata untuk warga.
               </h3>
               <p className="font-gt-sans text-xs text-[#55534c] leading-relaxed">
-                Setoran plastik PET, kardus, dan limbah upakara ditimbang presisi dengan sensor beban digital. Poin warga dapat langsung ditukar dengan token listrik PLN dan beras Banjar.
+                Setoran plastik PET, kardus, dan limbah upakara diverifikasi AI secara presisi. Poin warga dapat langsung ditukar dengan token listrik PLN dan kebutuhan desa adat.
               </p>
             </div>
             <div className="mt-6 pt-4 border-t border-[#1d1c19]/10 font-gt-mono text-[10px] text-[#015186] flex justify-between">
@@ -415,7 +419,7 @@ export default function PearLandingPage() {
       {/* 4. SECTION: CHAPTER 3 — THE TERMS (#terms) */}
       <section
         id="terms"
-        className="relative z-10 min-h-screen px-6 sm:px-12 lg:px-16 py-32 max-w-5xl mx-auto border-t border-[#1d1c19]/15"
+        className="relative z-10 min-h-screen px-6 sm:px-12 lg:px-16 py-16 sm:py-24 lg:py-32 max-w-5xl mx-auto border-t border-[#1d1c19]/15"
       >
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
           <div data-reveal="100" className="reveal-on-scroll lg:col-span-7 space-y-6">
@@ -426,7 +430,7 @@ export default function PearLandingPage() {
               Tanpa biaya di awal. Berbagi hasil nilai daur ulang.
             </h2>
             <p className="font-gt-sans text-base text-[#33322d] leading-relaxed max-w-xl">
-              Desa adat tidak dibebani biaya di muka: tanpa biaya konsultasi maupun tarif bulanan. Kami menanggung seluruh penyediaan perangkat IoT, analisis AI, dan pemasangan stasiun di banjar Anda.
+              Desa adat tidak dibebani biaya di muka: tanpa biaya konsultasi maupun tarif bulanan. Kami menanggung seluruh penyediaan perangkat IoT, analisis AI, dan pemasangan stasiun di desa adat Anda.
             </p>
 
             <div className="border-t border-[#1d1c19]/15 pt-6 space-y-4">
@@ -437,7 +441,7 @@ export default function PearLandingPage() {
                 Keterbukaan Sepenuhnya
               </span>
               <p className="font-gt-sans text-xs text-[#55534c] leading-relaxed max-w-lg">
-                Pendapatan sistem murni diperoleh dari porsi bagi hasil penjualan komoditas daur ulang yang berhasil diselamatkan dari TPA. Banjar memiliki penuh stasiun fisik dan data lingkungan warga.
+                Pendapatan sistem murni diperoleh dari porsi bagi hasil penjualan komoditas daur ulang yang berhasil diselamatkan dari TPA. Desa adat memiliki penuh stasiun fisik dan data lingkungan warga.
               </p>
             </div>
           </div>
@@ -454,14 +458,14 @@ export default function PearLandingPage() {
               Kami selektif dalam memilih kemitraan.
             </h3>
             <p className="font-gt-sans text-xs text-[#55534c] leading-relaxed">
-              Mitra kami adalah desa adat Banjar, pengelola kawasan wisata, dan instansi yang berkomitmen pada kelestarian nyata pulau Bali. Jika tujuan Anda sekadar formalitas tanpa kemauan memilah, kami bukan mitra yang tepat.
+              Mitra kami adalah desa adat, pengelola kawasan wisata, dan instansi yang berkomitmen pada kelestarian nyata pulau Bali. Jika tujuan Anda sekadar formalitas tanpa kemauan memilah, kami bukan mitra yang tepat.
             </p>
             <div className="pt-2">
               <Link
-                href="/history"
+                href="/dashboard"
                 className="font-gt-mono text-xs uppercase tracking-wider text-[#015186] font-bold hover:underline"
               >
-                Lihat Armada Terkoneksi &rarr;
+                Lihat Monitoring Terkoneksi &rarr;
               </Link>
             </div>
           </div>
@@ -471,7 +475,7 @@ export default function PearLandingPage() {
       {/* 5. SECTION: CHAPTER 4 — QUESTIONS / INTERACTIVE 3D FAQ CAROUSEL (#questions) */}
       <section
         id="questions"
-        className="relative z-10 min-h-screen px-6 sm:px-12 lg:px-16 py-32 max-w-5xl mx-auto border-t border-[#1d1c19]/15"
+        className="relative z-10 min-h-screen px-6 sm:px-12 lg:px-16 py-16 sm:py-24 lg:py-32 max-w-5xl mx-auto border-t border-[#1d1c19]/15"
       >
         <div data-reveal="50" className="reveal-on-scroll text-center mb-16">
           <span className="font-gt-mono text-[10px] text-[#84827a] uppercase tracking-widest block">
@@ -565,7 +569,7 @@ export default function PearLandingPage() {
               EcoSort.
             </h2>
             <p className="text-base sm:text-xl text-[#84827a] max-w-sm">
-              Kelestarian pulau Bali melalui teknologi cerdas dan pemberdayaan Banjar.
+              Kelestarian pulau Bali melalui teknologi cerdas dan pemberdayaan desa adat.
             </p>
           </div>
 
@@ -577,7 +581,7 @@ export default function PearLandingPage() {
               </span>
               <p className="leading-relaxed">
                 EcoSort Node Bali <br />
-                Banjar Kayumas, Denpasar <br />
+                Desa Adat Kayumas, Denpasar <br />
                 Bali 80232, Indonesia
               </p>
             </div>
@@ -596,13 +600,13 @@ export default function PearLandingPage() {
                   Tabungan & Saldo Warga
                 </Link>
                 <Link href="/admin/laporan" className="block hover:text-white transition-colors">
-                  Laporan & Statistik Banjar
+                  Laporan & Statistik Desa Adat
                 </Link>
               </div>
             </div>
             <div data-reveal="300" className="reveal-on-scroll">
               <span className="text-white uppercase tracking-widest block mb-3 font-bold">
-                LAYANAN BANJAR
+                LAYANAN DESA ADAT
               </span>
               <p className="leading-relaxed">
                 Email: <strong className="text-white">ops@ecosort.ai</strong> <br />
@@ -612,13 +616,13 @@ export default function PearLandingPage() {
             </div>
             <div data-reveal="400" className="reveal-on-scroll">
               <span className="text-white uppercase tracking-widest block mb-3 font-bold">
-                KEMITRAAN BANJAR
+                KEMITRAAN DESA ADAT
               </span>
               <Link
                 href="/login"
                 className="w-full min-h-[44px] border border-white/40 bg-white text-black py-2.5 font-bold uppercase tracking-wider hover:bg-zinc-200 transition text-center block"
               >
-                Portal Masuk Banjar &rarr;
+                Portal Masuk Desa Adat &rarr;
               </Link>
             </div>
           </div>
@@ -627,7 +631,7 @@ export default function PearLandingPage() {
             data-reveal="500"
             className="reveal-on-scroll pt-8 border-t border-[#ffffff1a] flex flex-wrap justify-between items-center text-[10px] font-gt-mono text-[#84827a]"
           >
-            <span>&copy; 2026 EcoSort Bali &middot; Inovasi Pengelolaan Sampah Berbasis Banjar</span>
+            <span>&copy; 2026 EcoSort Bali &middot; Inovasi Pengelolaan Sampah Berbasis Desa Adat</span>
             <span>SIMBOL LINGKUNGAN BERKELANJUTAN BALI</span>
           </div>
         </div>
@@ -644,7 +648,7 @@ export default function PearLandingPage() {
                     PROGRAM KEMITRAAN // BALI SMART VILLAGE
                   </span>
                   <h3 className="text-2xl font-bold text-white">
-                    Pendaftaran Banjar
+                    Pendaftaran Desa Adat
                   </h3>
                 </div>
                 <button
@@ -661,7 +665,7 @@ export default function PearLandingPage() {
                     Permohonan Berhasil Dikirim.
                   </span>
                   <p className="text-xs text-zinc-300 font-gt-sans leading-relaxed">
-                    Pengajuan Anda telah masuk ke sistem. Tim operasional EcoSort Bali akan menghubungi pengurus banjar dalam 1x24 jam kerja.
+                    Pengajuan Anda telah masuk ke sistem. Tim operasional EcoSort Bali akan menghubungi pengurus desa adat dalam 1x24 jam kerja.
                   </p>
                 </div>
               ) : (
@@ -689,20 +693,20 @@ export default function PearLandingPage() {
                       required
                       value={applyForm.email}
                       onChange={(e) => setApplyForm({ ...applyForm, email: e.target.value })}
-                      placeholder="kontak@banjar.desa.id"
+                      placeholder="kontak@desa.id"
                       className="w-full bg-white/5 border border-white/15 px-3.5 py-2.5 text-white placeholder-zinc-500 font-gt-mono focus:outline-none focus:border-white/50"
                     />
                   </div>
 
                   <div>
                     <label className="text-[10px] text-zinc-400 uppercase tracking-widest block mb-1">
-                      Nama Banjar / Desa Adat &amp; Kebutuhan
+                      Nama Desa Adat &amp; Kebutuhan
                     </label>
                     <textarea
                       rows={3}
                       value={applyForm.goal}
                       onChange={(e) => setApplyForm({ ...applyForm, goal: e.target.value })}
-                      placeholder="Sebutkan nama banjar, perkiraan volume sampah harian, dan kondisi tempat pembuangan saat ini..."
+                      placeholder="Sebutkan nama desa adat, perkiraan volume sampah harian, dan kondisi tempat pembuangan saat ini..."
                       className="w-full bg-white/5 border border-white/15 px-3.5 py-2.5 text-white placeholder-zinc-500 font-gt-mono focus:outline-none focus:border-white/50"
                     />
                   </div>

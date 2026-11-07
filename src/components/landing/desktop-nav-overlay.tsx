@@ -24,7 +24,8 @@ const MENU_ITEMS: NavItem[] = [
   { chapter: "BAB 1", title: "Monitoring IoT", href: "/dashboard", isRoute: true },
   { chapter: "BAB 2", title: "Bank Sampah", href: "/warga", isRoute: true },
   { chapter: "BAB 3", title: "AI Deteksi", href: "/petugas", isRoute: true },
-  { chapter: "BAB 4", title: "Portal Masuk", href: "/login", isRoute: true },
+  { chapter: "BAB 4", title: "Laporan Desa Adat", href: "/admin/laporan", isRoute: true },
+  { chapter: "BAB 5", title: "Portal Masuk", href: "/login", isRoute: true },
 ];
 
 export default function DesktopNavOverlay() {

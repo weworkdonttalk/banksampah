@@ -77,7 +77,7 @@ export default function BottomNav() {
     },
     {
       href: "/admin/laporan",
-      label: "Laporan Banjar",
+      label: "Laporan Desa Adat",
       shortLabel: "Laporan",
       icon: (active) => (
         <svg className="size-5" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
