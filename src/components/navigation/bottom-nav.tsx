@@ -27,74 +27,117 @@ export default function BottomNav() {
   }, [pathname]);
 
   // Dynamic nav items based on role
-  const navItems: NavItem[] = [
-    {
-      href: "/",
-      label: "Beranda",
-      shortLabel: "Beranda",
-      icon: (active) => (
-        <svg className="size-5" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-          <polyline points="9 22 9 12 15 12 15 22" />
-        </svg>
-      ),
-    },
-    {
-      href: "/dashboard",
-      label: "Monitoring IoT",
-      shortLabel: "IoT",
-      icon: (active) => (
-        <svg className="size-5" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
-          <circle cx="12" cy="12" r="2" />
-          <path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14" />
-        </svg>
-      ),
-    },
-    {
-      href: "/petugas",
-      label: "Input Setoran",
-      shortLabel: "Setoran",
-      icon: (active) => (
-        <svg className="size-5" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-          <line x1="12" y1="18" x2="12" y2="12" />
-          <line x1="9" y1="15" x2="15" y2="15" />
-        </svg>
-      ),
-    },
-    {
-      href: "/warga",
-      label: "Tabungan Warga",
-      shortLabel: "Warga",
-      icon: (active) => (
-        <svg className="size-5" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
-          <circle cx="12" cy="12" r="10" />
-          <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
-          <path d="M12 18V6" />
-        </svg>
-      ),
-    },
-    {
-      href: "/admin/laporan",
-      label: "Laporan Desa Adat",
-      shortLabel: "Laporan",
-      icon: (active) => (
-        <svg className="size-5" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
-          <line x1="18" y1="20" x2="18" y2="10" />
-          <line x1="12" y1="20" x2="12" y2="4" />
-          <line x1="6" y1="20" x2="6" y2="14" />
-        </svg>
-      ),
-    },
-  ];
+  const isStaff = role === "PETUGAS" || role === "ADMIN";
+
+  const navItems: NavItem[] = isStaff
+    ? [
+        {
+          href: "/",
+          label: "Beranda",
+          shortLabel: "Beranda",
+          icon: (active) => (
+            <svg className="size-5" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <polyline points="9 22 9 12 15 12 15 22" />
+            </svg>
+          ),
+        },
+        {
+          href: "/warga",
+          label: "Bank Sampah",
+          shortLabel: "Sampah",
+          icon: (active) => (
+            <svg className="size-5" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
+              <path d="M12 18V6" />
+            </svg>
+          ),
+        },
+        {
+          href: "/petugas",
+          label: "Input Setoran",
+          shortLabel: "Setoran",
+          icon: (active) => (
+            <svg className="size-5" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="12" y1="18" x2="12" y2="12" />
+              <line x1="9" y1="15" x2="15" y2="15" />
+            </svg>
+          ),
+        },
+        {
+          href: "/admin/laporan",
+          label: "Laporan",
+          shortLabel: "Laporan",
+          icon: (active) => (
+            <svg className="size-5" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="20" x2="18" y2="10" />
+              <line x1="12" y1="20" x2="12" y2="4" />
+              <line x1="6" y1="20" x2="6" y2="14" />
+            </svg>
+          ),
+        },
+        {
+          href: "/login",
+          label: "Akun",
+          shortLabel: "Akun",
+          icon: (active) => (
+            <svg className="size-5" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+          ),
+        },
+      ]
+    : [
+        {
+          href: "/",
+          label: "Beranda",
+          shortLabel: "Beranda",
+          icon: (active) => (
+            <svg className="size-5" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <polyline points="9 22 9 12 15 12 15 22" />
+            </svg>
+          ),
+        },
+        {
+          href: "/warga",
+          label: "Bank Sampah",
+          shortLabel: "Bank Sampah",
+          icon: (active) => (
+            <svg className="size-5" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
+              <path d="M12 18V6" />
+            </svg>
+          ),
+        },
+        {
+          href: "/login",
+          label: "Portal Masuk",
+          shortLabel: "Masuk",
+          icon: (active) => (
+            <svg className="size-5" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+          ),
+        },
+      ];
 
   return (
     <nav
       className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-[#1d1c19] text-[#f2f1ed] border-t border-white/10 pb-[env(safe-area-inset-bottom)]"
       aria-label="Navigasi Utama"
     >
-      <div className="max-w-md mx-auto grid grid-cols-5 h-16 items-center px-1">
+      <div
+        className={`max-w-md mx-auto grid h-16 items-center px-1 ${
+          navItems.length === 3 ? "grid-cols-3" : "grid-cols-5"
+        }`}
+      >
         {navItems.map((item) => {
           const isActive = pathname === item.href;
           return (

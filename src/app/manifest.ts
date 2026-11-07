@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "EcoSort AI — Bali Smart Waste & Hazard Mitigation",
     short_name: "EcoSort AI",
-    description: "Sistem IoT dan AI Mitigasi Bahaya Kebakaran Sampah & Bursa Daur Ulang Banjar Bali",
+    description: "Sistem IoT dan AI Mitigasi Bahaya Kebakaran Sampah & Pengelolaan Sampah Cerdas Bali",
     start_url: "/",
     display: "standalone",
     background_color: "#f2f1ed",

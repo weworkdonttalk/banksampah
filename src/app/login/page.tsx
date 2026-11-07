@@ -5,7 +5,7 @@ import { useState } from "react";
 import PearCanvas from "@/components/webgl/pear-canvas";
 import { playSuccessChime } from "@/lib/audio-alert";
 
-type UserRole = "WARGA" | "PETUGAS" | "PRAJURU";
+type UserRole = "WARGA" | "PETUGAS";
 
 interface RoleConfig {
   id: UserRole;
@@ -26,7 +26,7 @@ interface RoleConfig {
 const ROLES: Record<UserRole, RoleConfig> = {
   WARGA: {
     id: "WARGA",
-    label: "Warga Banjar",
+    label: "Warga",
     badge: "NASABAH POIN",
     identifierLabel: "Nomor HP / NIK / ID Warga",
     identifierPlaceholder: "08123456789 atau WGR-DPS-8841",
@@ -35,13 +35,13 @@ const ROLES: Record<UserRole, RoleConfig> = {
     defaultName: "I Wayan Sudiarta",
     defaultPin: "123456",
     targetUrl: "/warga",
-    targetLabel: "Buka Bursa Poin & Reward",
-    description: "Cek saldo poin daur ulang, riwayat timbangan, dan tukar voucher listrik atau beras.",
+    targetLabel: "Buka Bank Sampah & Reward",
+    description: "Cek saldo poin daur ulang, riwayat timbangan, dan tukar voucher listrik atau e-money.",
     inputMode: "tel",
   },
   PETUGAS: {
     id: "PETUGAS",
-    label: "Petugas Lapangan & DLH",
+    label: "Petugas",
     badge: "OPERATOR SISTEM",
     identifierLabel: "Nomor Induk Petugas (NIP / ID Operator)",
     identifierPlaceholder: "Contoh: OP-DLH-01",
@@ -52,21 +52,6 @@ const ROLES: Record<UserRole, RoleConfig> = {
     targetUrl: "/petugas",
     targetLabel: "Buka Pos Timbangan & AI Vision",
     description: "Input timbangan sampah warga, jalankan klasifikasi polimer Vision AI, dan verifikasi kas.",
-    inputMode: "text",
-  },
-  PRAJURU: {
-    id: "PRAJURU",
-    label: "Prajuru Desa Adat",
-    badge: "PENGURUS BANJAR",
-    identifierLabel: "Kode Banjar Adat / Desa",
-    identifierPlaceholder: "Contoh: BJR-KYM-01 (Banjar Kayumas)",
-    pinLabel: "Kunci Akses Desa Adat",
-    defaultId: "BJR-KYM-01",
-    defaultName: "Prajuru Banjar Kayumas",
-    defaultPin: "kayumas2026",
-    targetUrl: "/admin/laporan",
-    targetLabel: "Buka Logistik Armada DLH",
-    description: "Lihat ringkasan tonase sampah banjar, kas bagi hasil LPD, dan panggilan truk DLH 1-klik.",
     inputMode: "text",
   },
 };
@@ -154,7 +139,7 @@ export default function LoginPage() {
             Masuk ke Layanan EcoSort
           </h1>
           <p className="text-xs text-[#55534c] mt-1 leading-relaxed">
-            Portal masuk warga banjar, pengurus adat, dan petugas operasional kebersihan.
+            Portal masuk warga dan petugas operasional kebersihan.
           </p>
         </div>
 
@@ -225,7 +210,7 @@ export default function LoginPage() {
                 <label className="text-xs font-bold uppercase font-gt-mono text-[#1d1c19] block mb-2">
                   Pilih Peran Pengguna:
                 </label>
-                <div className="grid grid-cols-3 gap-1.5 p-1 bg-[#e7e5df]/60 border border-[#1d1c19]/15">
+                <div className="grid grid-cols-2 gap-2 p-1.5 bg-[#e7e5df]/60 border border-[#1d1c19]/15">
                   {(Object.keys(ROLES) as UserRole[]).map((r) => {
                     const isSelected = selectedRole === r;
                     return (

@@ -17,6 +17,11 @@ import {
   RotateCcw,
   AlertCircle,
   CheckCircle2,
+  Thermometer,
+  Wind,
+  Flame,
+  Activity,
+  Zap,
 } from "lucide-react";
 
 interface StationItem {
@@ -90,6 +95,66 @@ export default function CircularExchangePage() {
 
   const [selectedVoucher, setSelectedVoucher] = useState<(typeof VOUCHERS)[0] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Telemetri Singkat Sensor IoT (Suhu, Gas, Anomali Kedeteksi / Aman, Ultrasonik)
+  const [telemetry, setTelemetry] = useState({
+    temperature: 29.4,
+    gasPpm: 122,
+    hazardDetected: false,
+    ultrasonicDetected: false,
+    distanceCm: 48.0,
+    lastPing: "Real-time aktif",
+  });
+  const [isSimulatingHazard, setIsSimulatingHazard] = useState(false);
+
+  // Fluktuasi nilai sensor halus seperti siaran live ESP32
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (!isSimulatingHazard) {
+        setTelemetry((prev) => {
+          const deltaTemp = (Math.random() - 0.5) * 0.25;
+          const deltaGas = (Math.random() - 0.5) * 3;
+          return {
+            ...prev,
+            temperature: Math.max(26, Math.min(35, prev.temperature + deltaTemp)),
+            gasPpm: Math.max(90, Math.min(180, prev.gasPpm + deltaGas)),
+            lastPing: "0 dtk lalu",
+          };
+        });
+      }
+    }, 2800);
+    return () => clearInterval(timer);
+  }, [isSimulatingHazard]);
+
+  // Toggle Simulasi Uji Bahaya (Interaktif)
+  const handleToggleHazardSimulation = () => {
+    if (isSimulatingHazard) {
+      setIsSimulatingHazard(false);
+      setTelemetry({
+        temperature: 29.4,
+        gasPpm: 122,
+        hazardDetected: false,
+        ultrasonicDetected: false,
+        distanceCm: 48.0,
+        lastPing: "Normal aktif",
+      });
+      playSuccessChime();
+      setSuccessToast("Simulasi selesai: Kondisi sensor suhu & gas kembali normal.");
+      setErrorMessage(null);
+    } else {
+      setIsSimulatingHazard(true);
+      setTelemetry({
+        temperature: 53.6,
+        gasPpm: 465,
+        hazardDetected: true,
+        ultrasonicDetected: true,
+        distanceCm: 11.2,
+        lastPing: "Anomali terdeteksi",
+      });
+      playSirenSound();
+      setErrorMessage("UJI SENSOR INTERAKTIF: Suhu > 50°C & Gas > 400 PPM terdeteksi!");
+    }
+  };
 
   // Load initial data
   const loadCitizenData = async () => {
@@ -203,13 +268,18 @@ export default function CircularExchangePage() {
       const data = await res.json();
       if (data.success) {
         playSuccessChime();
-        setSuccessToast("Simulasi sensor ultrasonik: Sampah berhasil terdeteksi!");
+        setSuccessToast("Simulasi sensor ultrasonik: Sampah masuk corong terdeteksi (13.5 cm)!");
+        setTelemetry((prev) => ({
+          ...prev,
+          ultrasonicDetected: true,
+          distanceCm: 13.5,
+        }));
         if (activeSession) {
           setActiveSession((prev) => (prev ? { ...prev, status: "TRASH_DETECTED" } : null));
         }
       }
     } catch {
-      // ignore
+      setTelemetry((prev) => ({ ...prev, ultrasonicDetected: true, distanceCm: 13.5 }));
     }
   };
 
@@ -395,6 +465,233 @@ export default function CircularExchangePage() {
             </button>
           </div>
         </header>
+
+        {/* ----- RINCIAN SENSOR TELEMETRI STASIUN IOT (INTERAKTIF & REAL-TIME) ----- */}
+        <section
+          aria-label="Rincian Sensor Telemetri Stasiun"
+          className="bg-white/95 border border-[#1d1c19]/15 p-5 sm:p-6 backdrop-blur-sm shadow-xs space-y-4"
+        >
+          {/* Header Bar Telemetri Stasiun */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-[#1d1c19]/10 pb-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="relative flex size-2.5">
+                  <span
+                    className={`absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping ${
+                      telemetry.hazardDetected ? "bg-red-500" : "bg-emerald-500"
+                    }`}
+                  />
+                  <span
+                    className={`relative inline-flex size-2.5 rounded-full ${
+                      telemetry.hazardDetected ? "bg-red-600" : "bg-emerald-600"
+                    }`}
+                  />
+                </span>
+                <span className="font-gt-mono text-xs font-bold uppercase tracking-wider text-[#015186]">
+                  RINCIAN SENSOR TELEMETRI STASIUN // LIVE
+                </span>
+                <span className="text-[10px] font-gt-mono bg-emerald-50 text-emerald-800 border border-emerald-300 px-1.5 py-0.5 font-semibold">
+                  ONLINE
+                </span>
+              </div>
+              <p className="text-xs text-[#55534c] font-gt-mono">
+                Stasiun Terpilih: <strong>{STATIONS.find((s) => s.id === selectedStationId)?.name}</strong> &bull; {STATIONS.find((s) => s.id === selectedStationId)?.lokasi}
+              </p>
+            </div>
+
+            {/* Kontrol Interaktif Cepat: Uji Sensor & Ganti Stasiun */}
+            <div className="flex flex-wrap items-center gap-2 font-gt-mono text-xs">
+              <select
+                value={selectedStationId}
+                onChange={(e) => {
+                  setSelectedStationId(e.target.value);
+                  playSuccessChime();
+                  setSuccessToast(`Stasiun beralih ke: ${STATIONS.find((s) => s.id === e.target.value)?.name}`);
+                }}
+                className="h-9 border border-[#1d1c19]/25 bg-white px-2.5 text-xs font-mono font-semibold focus:outline-hidden cursor-pointer"
+              >
+                {STATIONS.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.deviceId} - {s.name}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={handleToggleHazardSimulation}
+                className={`h-9 px-3 border text-[11px] font-bold uppercase tracking-wider transition cursor-pointer flex items-center gap-1.5 active:scale-95 ${
+                  isSimulatingHazard
+                    ? "bg-red-600 border-red-700 text-white animate-pulse"
+                    : "bg-[#f2f1ed] border-[#1d1c19]/20 text-[#1d1c19] hover:bg-[#1d1c19] hover:text-white"
+                }`}
+              >
+                <Activity className="size-3.5" />
+                <span>{isSimulatingHazard ? "Reset Sensor Normal" : "Simulasi Uji Bahaya"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSimulateUltrasonic}
+                className="h-9 px-3 bg-white border border-[#1d1c19]/25 text-[#1d1c19] hover:bg-[#1d1c19]/5 text-[11px] font-bold uppercase tracking-wider transition cursor-pointer flex items-center gap-1.5 active:scale-95 shadow-2xs"
+              >
+                <Zap className="size-3.5 text-[#015186]" />
+                <span>Tes Masukkan Sampah</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 3 Grid Sensor Telemetri Singkat */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* 1. SENSOR SUHU */}
+            <div
+              className={`p-4 border transition-all duration-300 font-gt-mono relative overflow-hidden ${
+                telemetry.temperature > 45 ? "bg-red-50 border-red-300" : "bg-[#fbfbfa] border-[#1d1c19]/15"
+              }`}
+            >
+              <div className="flex items-center justify-between text-[#84827a] text-[10px] uppercase font-bold mb-2">
+                <span className="flex items-center gap-1.5">
+                  <Thermometer
+                    className={`size-4 ${
+                      telemetry.temperature > 45 ? "text-red-600 animate-bounce" : "text-[#015186]"
+                    }`}
+                  />
+                  1. Sensor Suhu
+                </span>
+                <span
+                  className={`px-1.5 py-0.5 border text-[9px] font-bold uppercase ${
+                    telemetry.temperature > 45
+                      ? "bg-red-100 text-red-800 border-red-300"
+                      : "bg-emerald-50 text-emerald-800 border-emerald-300"
+                  }`}
+                >
+                  {telemetry.temperature > 45 ? "Waspada Panas" : "Suhu Normal"}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span
+                  className={`text-2xl sm:text-3xl font-bold tracking-tight ${
+                    telemetry.temperature > 45 ? "text-red-700" : "text-[#1d1c19]"
+                  }`}
+                >
+                  {telemetry.temperature.toFixed(1)}°C
+                </span>
+                <span className="text-[10px] text-[#84827a]">Batas Aman: &lt; 45.0°C</span>
+              </div>
+              {/* Progress bar visual suhu interaktif */}
+              <div className="mt-3 w-full bg-zinc-200 h-1.5 overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-700 ${
+                    telemetry.temperature > 45 ? "bg-red-600" : "bg-[#015186]"
+                  }`}
+                  style={{ width: `${Math.min(100, (telemetry.temperature / 60) * 100)}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-[#55534c] mt-2 font-gt-sans leading-relaxed">
+                {telemetry.temperature > 45
+                  ? "Peringatan panas tinggi terdeteksi di ruang stasiun!"
+                  : "Sensor suhu membaca kondisi sejuk dan aman."}
+              </p>
+            </div>
+
+            {/* 2. SENSOR GAS METANA / VOC */}
+            <div
+              className={`p-4 border transition-all duration-300 font-gt-mono relative overflow-hidden ${
+                telemetry.gasPpm > 350 ? "bg-amber-50 border-amber-300" : "bg-[#fbfbfa] border-[#1d1c19]/15"
+              }`}
+            >
+              <div className="flex items-center justify-between text-[#84827a] text-[10px] uppercase font-bold mb-2">
+                <span className="flex items-center gap-1.5">
+                  <Wind
+                    className={`size-4 ${
+                      telemetry.gasPpm > 350 ? "text-amber-600 animate-spin" : "text-[#015186]"
+                    }`}
+                  />
+                  2. Sensor Gas MQ
+                </span>
+                <span
+                  className={`px-1.5 py-0.5 border text-[9px] font-bold uppercase ${
+                    telemetry.gasPpm > 350
+                      ? "bg-amber-100 text-amber-900 border-amber-300"
+                      : "bg-emerald-50 text-emerald-800 border-emerald-300"
+                  }`}
+                >
+                  {telemetry.gasPpm > 350 ? "Konsentrasi Naik" : "Kadar Rendah"}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span
+                  className={`text-2xl sm:text-3xl font-bold tracking-tight ${
+                    telemetry.gasPpm > 350 ? "text-amber-800" : "text-[#1d1c19]"
+                  }`}
+                >
+                  {Math.round(telemetry.gasPpm)} PPM
+                </span>
+                <span className="text-[10px] text-[#84827a]">Batas Aman: &lt; 400 PPM</span>
+              </div>
+              {/* Progress bar visual gas interaktif */}
+              <div className="mt-3 w-full bg-zinc-200 h-1.5 overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-700 ${
+                    telemetry.gasPpm > 350 ? "bg-amber-600" : "bg-emerald-600"
+                  }`}
+                  style={{ width: `${Math.min(100, (telemetry.gasPpm / 500) * 100)}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-[#55534c] mt-2 font-gt-sans leading-relaxed">
+                {telemetry.gasPpm > 350
+                  ? "Lonjakan gas mudah terbakar / organik terdeteksi."
+                  : "Sensor gas stabil tanpa konsentrasi gas berbahaya."}
+              </p>
+            </div>
+
+            {/* 3. STATUS DETEKSI ANOMALI API / ASAP (KEDETEKSI APA KAGA) */}
+            <div
+              className={`p-4 border transition-all duration-300 font-gt-mono relative overflow-hidden ${
+                telemetry.hazardDetected ? "bg-red-100 border-red-500" : "bg-[#fbfbfa] border-[#1d1c19]/15"
+              }`}
+            >
+              <div className="flex items-center justify-between text-[#84827a] text-[10px] uppercase font-bold mb-2">
+                <span className="flex items-center gap-1.5">
+                  <Flame
+                    className={`size-4 ${
+                      telemetry.hazardDetected ? "text-red-600 animate-pulse" : "text-[#55534c]"
+                    }`}
+                  />
+                  3. Deteksi Bahaya Api / Asap
+                </span>
+                <span className="text-[9px] text-[#84827a] font-mono">{telemetry.lastPing}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div
+                  className={`size-3 rounded-full ${
+                    telemetry.hazardDetected ? "bg-red-600 animate-ping" : "bg-emerald-500 animate-pulse"
+                  }`}
+                />
+                <span
+                  className={`text-sm sm:text-base font-bold uppercase ${
+                    telemetry.hazardDetected ? "text-red-900" : "text-emerald-800"
+                  }`}
+                >
+                  {telemetry.hazardDetected ? "TERDETEKSI BAHAYA!" : "TIDAK TERDETEKSI (AMAN)"}
+                </span>
+              </div>
+              <div className="mt-2.5 p-2 bg-white/70 border border-[#1d1c19]/10 text-[10px] font-gt-sans text-[#55534c] leading-relaxed flex items-center justify-between">
+                <span>Sensor Corong Masuk:</span>
+                <strong className={telemetry.ultrasonicDetected ? "text-[#015186]" : "text-emerald-700"}>
+                  {telemetry.ultrasonicDetected
+                    ? `Sampah Masuk (${telemetry.distanceCm.toFixed(1)} cm)`
+                    : "Corong Kosong (Siap)"}
+                </strong>
+              </div>
+              <p className="text-[10px] text-[#84827a] mt-2 font-gt-mono">
+                {telemetry.hazardDetected
+                  ? "(!) Sinyal peringatan dikirim otomatis ke petugas."
+                  : "Sensor terus memindai ruang stasiun secara aktif."}
+              </p>
+            </div>
+          </div>
+        </section>
 
         {/* 12-COLUMN LAYOUT */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

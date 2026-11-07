@@ -229,7 +229,7 @@ export default function AdminLaporanPage() {
           <div>
             <div className="flex items-center gap-2 font-gt-mono text-[11px] text-[#015186] font-semibold uppercase tracking-wider mb-1">
               <span className="size-2 rounded-full bg-[#1d1c19]" />
-              <span>ADMINISTRASI BANJAR &bull; PENGATURAN TARIF &amp; AUDIT IOT</span>
+              <span>ADMINISTRASI DESA ADAT &bull; PENGATURAN TARIF &amp; AUDIT IOT</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#1d1c19]">
               Laporan Sesi, Tarif Flat &amp; Simulator IoT
@@ -251,7 +251,7 @@ export default function AdminLaporanPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* ----- KOLOM KIRI (6/12 TARIF FLAT & SIMULATOR HARDWARE) ----- */}
           <div className="lg:col-span-6 space-y-6">
-            {/* PANEL 1: PENGATURAN TARIF FLAT BANJAR */}
+            {/* PANEL 1: PENGATURAN TARIF FLAT DESA ADAT */}
             <form onSubmit={handleSaveTariff} className="bg-white/90 border border-[#1d1c19]/15 p-6 backdrop-blur-sm shadow-xs space-y-4 font-gt-mono text-xs">
               <div className="flex items-center justify-between border-b border-[#1d1c19]/10 pb-3">
                 <div className="flex items-center gap-2">
@@ -306,7 +306,7 @@ export default function AdminLaporanPage() {
                 disabled={savingTariff}
                 className="w-full bg-[#1d1c19] text-[#f2f1ed] py-3.5 px-4 text-xs font-bold uppercase tracking-wider hover:bg-black transition cursor-pointer active:scale-95 shadow-xs"
               >
-                {savingTariff ? "Menyimpan Tarif..." : "Simpan Pembaruan Tarif Banjar →"}
+                {savingTariff ? "Menyimpan Tarif..." : "Simpan Pembaruan Tarif →"}
               </button>
             </form>
 
