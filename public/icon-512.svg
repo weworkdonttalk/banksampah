@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" fill="#1d1c19" rx="96"/>
+  <path d="M256 74 C278 96 342 192 342 284 C342 336 298 394 256 416 C214 394 170 336 170 284 C170 192 234 96 256 74 Z" fill="#015186" />
+  <circle cx="256" cy="300" r="48" fill="#f2f1ed" />
+  <text x="256" y="464" text-anchor="middle" fill="#f2f1ed" font-family="monospace" font-size="36" font-weight="bold" letter-spacing="4">ECOSORT AI</text>
+</svg>

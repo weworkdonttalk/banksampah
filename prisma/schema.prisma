@@ -1,0 +1,44 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model StationTelemetry {
+  id          String   @id @default(cuid())
+  stationId   String
+  temperature Float
+  gasPpm      Float
+  fillPercent Float
+  servoState  String
+  createdAt   DateTime @default(now())
+
+  @@index([stationId])
+  @@index([createdAt])
+}
+
+model DepositLog {
+  id          String   @id @default(cuid())
+  userId      String
+  wasteType   String   // ORGANIC / INORGANIC
+  pointsEarned Int
+  co2SavedKg  Float
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model DispatchLog {
+  id          String   @id @default(cuid())
+  stationId   String
+  driverName  String
+  status      String   // EN_ROUTE / LOADING / COMPLETED / STANDBY
+  etaMinutes  Int
+  createdAt   DateTime @default(now())
+
+  @@index([stationId])
+}

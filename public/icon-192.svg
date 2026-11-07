@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <rect width="192" height="192" fill="#1d1c19" rx="36"/>
+  <!-- EcoSort Flame / Leaf Mark -->
+  <path d="M96 28 C104 36 128 72 128 106 C128 126 112 148 96 156 C80 148 64 126 64 106 C64 72 88 36 96 28 Z" fill="#015186" />
+  <circle cx="96" cy="112" r="18" fill="#f2f1ed" />
+  <text x="96" y="174" text-anchor="middle" fill="#f2f1ed" font-family="monospace" font-size="14" font-weight="bold" letter-spacing="2">ECOSORT</text>
+</svg>
