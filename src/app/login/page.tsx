@@ -212,7 +212,7 @@ export default function LoginPage() {
 
                 <Link
                   href={ROLES[loggedInUser.role].targetUrl}
-                  className="w-full min-h-[52px] bg-[#015186] hover:bg-[#003d66] text-white py-3.5 px-4 font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-between shadow-sm active:scale-98"
+                  className="relative z-20 pointer-events-auto w-full min-h-[52px] bg-[#015186] hover:bg-[#003d66] text-white py-3.5 px-4 font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-between shadow-sm active:scale-98"
                 >
                   <span>{ROLES[loggedInUser.role].targetLabel}</span>
                   <span className="text-sm">&rarr;</span>
