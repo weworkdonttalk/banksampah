@@ -8,6 +8,12 @@ interface RiskScoreWidgetProps {
   temperature: number;
   gasPpm: number;
   isWaitingSensor?: boolean;
+  explanation?: {
+    ringkasan_analisis?: string;
+    potensi_penyebab?: string[];
+    tindakan_petugas?: string[];
+    urgensi?: string;
+  } | null;
 }
 
 export default function RiskScoreWidget({
@@ -16,6 +22,7 @@ export default function RiskScoreWidget({
   temperature,
   gasPpm,
   isWaitingSensor = true,
+  explanation,
 }: RiskScoreWidgetProps) {
   const isHazard = !isWaitingSensor && level === "HAZARD";
   const isWarning = !isWaitingSensor && level === "WARNING";
@@ -139,12 +146,27 @@ export default function RiskScoreWidget({
           <p className="text-xs sm:text-sm text-[#33322d] leading-relaxed">
             {isWaitingSensor
               ? "Sistem siap menerima data. Nyalakan perangkat IoT (ESP32-S3) pada wadah sampah agar suhu dan kadar gas metana terpantau secara langsung."
+              : explanation?.ringkasan_analisis
+              ? explanation.ringkasan_analisis
               : isHazard
               ? "PERINGATAN DARURAT: Suhu wadah melebihi 45°C bersamaan dengan gas metana di atas 400 PPM. Katup pengaman otomatis ditutup rapat untuk menghentikan pasokan oksigen ke dalam wadah."
               : isWarning
               ? "PERHATIAN: Ada sedikit lonjakan gas di atas batas wajar. Sistem meningkatkan kecepatan pemantauan data."
               : "Semua sensor berada dalam batas aman. Tidak ada indikasi panas berlebih maupun kebocoran gas berbahaya."}
           </p>
+
+          {!isWaitingSensor && explanation?.tindakan_petugas && explanation.tindakan_petugas.length > 0 && (
+            <div className="p-2.5 bg-white/80 border border-[#1d1c19]/10 text-[11px] font-gt-mono space-y-1">
+              <span className="text-[10px] uppercase font-bold text-[#015186] block">
+                Rekomendasi Tindakan Petugas:
+              </span>
+              <ul className="list-disc pl-4 space-y-0.5 text-[#55534c]">
+                {explanation.tindakan_petugas.slice(0, 3).map((act, i) => (
+                  <li key={i}>{act}</li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3 pt-3 border-t border-[#1d1c19]/10 font-gt-mono text-xs">
             <div className="border border-[#1d1c19]/10 bg-white/70 p-3">

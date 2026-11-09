@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { dbService } from "@/lib/db-service";
 import { getSession } from "@/lib/auth";
-import { analyzeWastePhoto } from "@/lib/ai-vision";
+import { analyzeWastePhoto, validateImagePayload, WasteVerificationOutput } from "@/lib/ai-vision";
 
 const SubmitPhotoSchema = z.object({
   userCategory: z.enum(["ORGANIK", "ANORGANIK"]),
-  imageBase64: z.string().min(10), // Base64 data atau data URL
+  imageBase64: z.string().min(10),
 });
 
 export async function POST(
@@ -52,32 +52,53 @@ export async function POST(
 
     const { userCategory, imageBase64 } = parsed.data;
 
-    // Simpan gambar (Data URL atau path Blob/Storage)
+    // Validasi ukuran dan tipe gambar server-side (maks 2MB, jpeg/png/webp)
+    const imgValidation = validateImagePayload(imageBase64);
+    if (!imgValidation.valid) {
+      return NextResponse.json({ error: imgValidation.error }, { status: 400 });
+    }
+
+    // Simpan gambar (simulasi URL / storage boundary)
     const imageUrl = imageBase64.length > 500000
-      ? imageBase64.slice(0, 500000) // Safety boundary
+      ? imageBase64.slice(0, 500000)
       : imageBase64;
 
-    // Jalankan analisis AI Vision
-    let aiResult;
+    // Jalankan analisis AI Vision lewat modul Gemini terpusat
+    let aiResult: WasteVerificationOutput;
     try {
-      aiResult = await analyzeWastePhoto(imageBase64, userCategory);
+      aiResult = await analyzeWastePhoto(imageBase64, userCategory, user.userId);
     } catch {
-      // Jika AI gagal / timeout -> fallback ke status perlu tinjauan petugas, jangan beri saldo otomatis
+      // Jika AI gagal / timeout -> fallback ke status perlu tinjauan petugas, tanpa saldo otomatis
       aiResult = {
-        kategori: "tidak_jelas" as const,
+        kategori: "tidak_jelas",
         subjenis: "lainnya",
         confidence: 0.0,
+        benda_berisiko_api: false,
+        jenis_risiko: null,
         alasan_singkat: "Sistem AI sedang sibuk atau mengalami timeout.",
         tips_pemilahan: "Setoran dialihkan ke tinjauan fisik oleh petugas banjar.",
       };
     }
 
-    // Proses aturan verifikasi & pencatatan ledger
+    // Proses aturan verifikasi & pencatatan saldo di server (tidak pernah percaya client)
     const updatedSession = await dbService.processSessionAiResult(id, {
       userCategory,
       imageUrl,
       aiResult,
     });
+
+    let message = "";
+    if (aiResult.benda_berisiko_api) {
+      message = `PERINGATAN BAHAYA: Terdeteksi benda berisiko api (${aiResult.jenis_risiko || "baterai / korek"}). Jangan dibuang ke tong ini, serahkan ke petugas banjar. Setoran dialihkan ke tinjauan petugas.`;
+    } else if (updatedSession.status === "COMPLETED") {
+      message = updatedSession.isCorrected
+        ? `Koreksi AI: Pilihan Anda (${userCategory}) dikoreksi ke ${updatedSession.aiCategory?.toUpperCase()}. Saldo flat Rp${updatedSession.rewardAmount.toLocaleString("id-ID")} berhasil ditambahkan (dicatat sebagai koreksi).`
+        : `Setoran terverifikasi! Saldo flat Rp${updatedSession.rewardAmount.toLocaleString("id-ID")} berhasil ditambahkan ke akun Anda.`;
+    } else if (updatedSession.status === "TRASH_DETECTED") {
+      message = `Foto kurang jelas / confidence rendah (${Math.round((aiResult.confidence || 0) * 100)}%). Silakan ambil foto ulang (Percobaan ${updatedSession.retryCount}/2).`;
+    } else {
+      message = "Foto belum jelas setelah 2 kali percobaan. Setoran dialihkan ke tinjauan fisik oleh petugas banjar (saldo tertahan).";
+    }
 
     return NextResponse.json({
       success: true,
@@ -86,14 +107,10 @@ export async function POST(
       isCorrected: updatedSession.isCorrected,
       rewardAmount: updatedSession.rewardAmount,
       needsReview: updatedSession.status === "NEEDS_REVIEW",
-      message:
-        updatedSession.status === "COMPLETED"
-          ? updatedSession.isCorrected
-            ? `Koreksi AI: Pilihan Anda dikoreksi ke ${updatedSession.aiCategory?.toUpperCase()}. Saldo flat Rp${updatedSession.rewardAmount.toLocaleString("id-ID")} berhasil ditambahkan!`
-            : `Setoran terverifikasi! Saldo flat Rp${updatedSession.rewardAmount.toLocaleString("id-ID")} berhasil ditambahkan ke akun Anda.`
-          : updatedSession.status === "NEEDS_REVIEW"
-          ? "Foto belum jelas setelah percobaan maksimal. Setoran sedang menunggu tinjauan petugas banjar."
-          : "Foto kurang jelas. Silakan ambil foto ulang (maksimal 2 kali percobaan).",
+      hasFireRisk: aiResult.benda_berisiko_api,
+      retryAllowed: updatedSession.status === "TRASH_DETECTED",
+      retryCount: updatedSession.retryCount,
+      message,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Gagal memproses foto setoran";

@@ -4,7 +4,12 @@ import { dbService } from "@/lib/db-service";
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
-  const banjarId = req.nextUrl.searchParams.get("banjarId") || session?.banjarId;
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Every role only receives stations from its own Banjar.
+  const banjarId = session.banjarId;
 
   let stations;
   if (banjarId) {

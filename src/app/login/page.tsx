@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import PearCanvas from "@/components/webgl/pear-canvas";
 import { playSuccessChime } from "@/lib/audio-alert";
 
-type UserRole = "WARGA" | "PETUGAS";
+type UserRole = "WARGA" | "PETUGAS" | "ADMIN_BANJAR";
 
 interface RoleConfig {
   id: UserRole;
@@ -54,6 +54,21 @@ const ROLES: Record<UserRole, RoleConfig> = {
     description: "Input timbangan sampah warga, jalankan klasifikasi polimer Vision AI, dan verifikasi kas.",
     inputMode: "text",
   },
+  ADMIN_BANJAR: {
+    id: "ADMIN_BANJAR",
+    label: "Admin Banjar",
+    badge: "AKSES PENUH",
+    identifierLabel: "Email / ID Admin",
+    identifierPlaceholder: "admin@kayumas.banjar.id",
+    pinLabel: "Kata Sandi Admin",
+    defaultId: "admin@kayumas.banjar.id",
+    defaultName: "I Gusti Ngurah Agung",
+    defaultPin: "admin123",
+    targetUrl: "/dashboard",
+    targetLabel: "Buka Semua Sistem",
+    description: "Akses penuh ke monitoring IoT, AI Vision, bank sampah, laporan, dan pengaturan banjar.",
+    inputMode: "text",
+  },
 };
 
 export default function LoginPage() {
@@ -72,6 +87,21 @@ export default function LoginPage() {
 
   const activeConfig = ROLES[selectedRole];
 
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.authenticated && d.user) {
+          setLoggedInUser({
+            name: d.user.name,
+            id: d.user.id,
+            role: d.user.role,
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // Quick switch role and prefill demo credentials
   const handleRoleSelect = (role: UserRole) => {
     setSelectedRole(role);
@@ -81,7 +111,7 @@ export default function LoginPage() {
     setLoggedInUser(null);
   };
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
 
@@ -91,21 +121,36 @@ export default function LoginPage() {
     }
 
     setLoading(true);
-
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: identifier.trim(), password }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.user) {
+        throw new Error(data.error || "Login gagal");
+      }
       setLoggedInUser({
-        name: activeConfig.defaultName,
-        id: identifier.trim(),
-        role: selectedRole,
+        name: data.user.name,
+        id: data.user.id,
+        role: data.user.role,
       });
       playSuccessChime();
-    }, 380);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Login gagal");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await fetch("/api/auth/me", { method: "POST" });
     setLoggedInUser(null);
     setErrorMessage("");
+    setSelectedRole("WARGA");
+    setIdentifier(ROLES.WARGA.defaultId);
+    setPassword(ROLES.WARGA.defaultPin);
   };
 
   return (
@@ -139,7 +184,7 @@ export default function LoginPage() {
             Masuk ke Layanan EcoSort
           </h1>
           <p className="text-xs text-[#55534c] mt-1 leading-relaxed">
-            Portal masuk warga dan petugas operasional kebersihan.
+            Warga hanya membuka Bank Sampah. Admin Banjar membuka seluruh sistem.
           </p>
         </div>
 
@@ -173,20 +218,63 @@ export default function LoginPage() {
                   <span className="text-sm">&rarr;</span>
                 </Link>
 
-                <div className="grid grid-cols-2 gap-2 pt-1 font-gt-mono text-xs">
-                  <Link
-                    href="/dashboard"
-                    className="border border-[#1d1c19]/20 bg-white hover:bg-[#f2f1ed] p-3 text-center font-semibold text-[#1d1c19] min-h-[46px] flex items-center justify-center"
-                  >
-                    Deteksi Bahaya
-                  </Link>
-                  <Link
-                    href="/warga"
-                    className="border border-[#1d1c19]/20 bg-white hover:bg-[#f2f1ed] p-3 text-center font-semibold text-[#1d1c19] min-h-[46px] flex items-center justify-center"
-                  >
-                    Bursa Poin
-                  </Link>
-                </div>
+                {loggedInUser.role === "WARGA" ? (
+                  <div className="border border-amber-300 bg-amber-50/80 p-3 text-center">
+                    <span className="text-[10px] font-gt-mono text-amber-900 font-bold uppercase tracking-wider block">
+                      HAK AKSES: HANYA BANK SAMPAH
+                    </span>
+                    <p className="text-[11px] text-amber-800 mt-1 font-gt-sans">
+                      Akun Warga hanya dapat mengakses layanan Bank Sampah & Reward. Akses dashboard IoT dan operasional stasiun dikunci.
+                    </p>
+                  </div>
+                ) : loggedInUser.role === "ADMIN_BANJAR" ? (
+                  <div className="space-y-2 pt-1 font-gt-mono text-xs">
+                    <div className="text-[10px] text-emerald-800 uppercase font-bold text-center bg-emerald-50 border border-emerald-200 py-1.5">
+                      ✓ OTORISASI PENUH // AKSES SEMUA FITUR
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Link
+                        href="/dashboard"
+                        className="border border-[#1d1c19]/20 bg-white hover:bg-[#f2f1ed] p-2.5 text-center font-semibold text-[#1d1c19] min-h-[44px] flex items-center justify-center text-[11px]"
+                      >
+                        1. Monitoring IoT
+                      </Link>
+                      <Link
+                        href="/petugas"
+                        className="border border-[#1d1c19]/20 bg-white hover:bg-[#f2f1ed] p-2.5 text-center font-semibold text-[#1d1c19] min-h-[44px] flex items-center justify-center text-[11px]"
+                      >
+                        2. AI & Petugas
+                      </Link>
+                      <Link
+                        href="/admin/laporan"
+                        className="border border-[#1d1c19]/20 bg-white hover:bg-[#f2f1ed] p-2.5 text-center font-semibold text-[#1d1c19] min-h-[44px] flex items-center justify-center text-[11px]"
+                      >
+                        3. Laporan Desa
+                      </Link>
+                      <Link
+                        href="/warga"
+                        className="border border-[#1d1c19]/20 bg-white hover:bg-[#f2f1ed] p-2.5 text-center font-semibold text-[#1d1c19] min-h-[44px] flex items-center justify-center text-[11px]"
+                      >
+                        4. Bank Sampah
+                      </Link>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 pt-1 font-gt-mono text-xs">
+                    <Link
+                      href="/petugas"
+                      className="border border-[#1d1c19]/20 bg-white hover:bg-[#f2f1ed] p-3 text-center font-semibold text-[#1d1c19] min-h-[46px] flex items-center justify-center"
+                    >
+                      Pos Timbangan
+                    </Link>
+                    <Link
+                      href="/warga"
+                      className="border border-[#1d1c19]/20 bg-white hover:bg-[#f2f1ed] p-3 text-center font-semibold text-[#1d1c19] min-h-[46px] flex items-center justify-center"
+                    >
+                      Bank Sampah
+                    </Link>
+                  </div>
+                )}
               </div>
 
               <div className="pt-4 border-t border-[#1d1c19]/10 flex items-center justify-between text-xs">
@@ -207,10 +295,10 @@ export default function LoginPage() {
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               {/* Role Segmented Selector */}
               <div>
-                <label className="text-xs font-bold uppercase font-gt-mono text-[#1d1c19] block mb-2">
+                <label className="text-xs font-bold uppercase font-gt-mono text-[#1d1c19] block mb-3">
                   Pilih Peran Pengguna:
                 </label>
-                <div className="grid grid-cols-2 gap-2 p-1.5 bg-[#e7e5df]/60 border border-[#1d1c19]/15">
+                <div className="grid grid-cols-3 gap-2 p-2 bg-[#e7e5df]/60 border border-[#1d1c19]/15">
                   {(Object.keys(ROLES) as UserRole[]).map((r) => {
                     const isSelected = selectedRole === r;
                     return (
@@ -218,18 +306,14 @@ export default function LoginPage() {
                         key={r}
                         type="button"
                         onClick={() => handleRoleSelect(r)}
-                        className={`py-2 px-1 text-center border transition-all cursor-pointer min-h-[46px] ${
+                        className={`py-3 px-2 text-center border transition-all cursor-pointer min-h-[50px] text-xs font-semibold ${
                           isSelected
-                            ? "border-[#1d1c19] bg-[#1d1c19] text-white font-bold shadow-xs"
-                            : "border-transparent bg-transparent text-[#55534c]"
+                            ? "bg-[#015186] text-white border-[#015186] font-bold"
+                            : "bg-white text-[#1d1c19] border-[#1d1c19]/20 hover:border-[#1d1c19]/40"
                         }`}
                       >
-                        <span className="block text-[9px] font-gt-mono uppercase opacity-75">
-                          {ROLES[r].badge}
-                        </span>
-                        <span className="block text-xs font-semibold truncate">
-                          {ROLES[r].label.split(" ")[0]}
-                        </span>
+                        <span className="block">{ROLES[r].label}</span>
+                        <span className="block text-[9px] font-gt-mono uppercase opacity-75">{ROLES[r].badge}</span>
                       </button>
                     );
                   })}
@@ -260,7 +344,7 @@ export default function LoginPage() {
               {errorMessage && (
                 <div
                   role="alert"
-                  className="p-3 bg-red-50 border border-red-400 text-red-900 text-xs font-gt-mono font-bold"
+                  className="p-4 bg-red-50 border border-red-400 text-red-900 text-sm sm:text-base font-gt-mono font-bold leading-snug"
                 >
                   {errorMessage}
                 </div>
@@ -268,7 +352,7 @@ export default function LoginPage() {
 
               {/* Input: Identifier (Font size >= 16px to prevent iOS auto-zoom) */}
               <div>
-                <label className="text-xs font-semibold text-[#1d1c19] block mb-1">
+                <label className="text-xs font-semibold text-[#1d1c19] block mb-2.5">
                   {activeConfig.identifierLabel}
                 </label>
                 <input
@@ -279,20 +363,20 @@ export default function LoginPage() {
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   placeholder={activeConfig.identifierPlaceholder}
-                  className="w-full bg-white border border-[#1d1c19]/20 px-3.5 py-3 text-base text-[#1d1c19] font-gt-mono focus:outline-none focus:border-[#015186] min-h-[48px] rounded-none"
+                  className="w-full bg-white border border-[#1d1c19]/20 px-4 py-3.5 text-base text-[#1d1c19] font-gt-mono focus:outline-none focus:border-[#015186] focus:ring-1 focus:ring-[#015186] min-h-[48px] rounded-none transition-colors"
                 />
               </div>
 
               {/* Input: Password / PIN (Font size >= 16px to prevent iOS auto-zoom) */}
               <div>
-                <div className="flex justify-between items-baseline mb-1">
+                <div className="flex justify-between items-baseline mb-2.5">
                   <label className="text-xs font-semibold text-[#1d1c19]">
                     {activeConfig.pinLabel}
                   </label>
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="text-xs text-[#015186] font-semibold hover:underline cursor-pointer p-1 min-h-[44px] flex items-center"
+                    className="text-xs text-[#015186] font-semibold hover:underline cursor-pointer p-1.5 min-h-[44px] flex items-center"
                   >
                     {showPassword ? "Sembunyikan" : "Perlihatkan"}
                   </button>
@@ -304,7 +388,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Masukkan sandi atau PIN"
-                  className="w-full bg-white border border-[#1d1c19]/20 px-3.5 py-3 text-base text-[#1d1c19] font-gt-mono focus:outline-none focus:border-[#015186] min-h-[48px] rounded-none"
+                  className="w-full bg-white border border-[#1d1c19]/20 px-4 py-3.5 text-base text-[#1d1c19] font-gt-mono focus:outline-none focus:border-[#015186] focus:ring-1 focus:ring-[#015186] min-h-[48px] rounded-none transition-colors"
                 />
               </div>
 

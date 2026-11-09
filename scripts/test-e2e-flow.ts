@@ -72,6 +72,8 @@ async function runTest() {
     kategori: "anorganik" as const,
     subjenis: "plastik" as const,
     confidence: 0.94,
+    benda_berisiko_api: false,
+    jenis_risiko: null,
     alasan_singkat: "Botol plastik polimer PET terdeteksi",
     tips_pemilahan: "Koreksi ke anorganik",
   };

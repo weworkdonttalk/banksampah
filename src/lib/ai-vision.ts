@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { generateJSON } from "@/lib/ai/gemini";
 
-export const AiVisionOutputSchema = z.object({
+export const WasteVerificationOutputSchema = z.object({
   kategori: z.enum(["organik", "anorganik", "tidak_jelas"]),
   subjenis: z.enum([
     "plastik",
@@ -8,212 +9,252 @@ export const AiVisionOutputSchema = z.object({
     "logam",
     "kaca",
     "sisa_makanan",
-    "daun",
+    "daun_dan_sampah_upacara",
     "lainnya",
   ]),
   confidence: z.number().min(0).max(1),
+  benda_berisiko_api: z.boolean(),
+  jenis_risiko: z
+    .enum(["baterai", "aerosol", "korek_gas", "powerbank", "lainnya"])
+    .nullable(),
   alasan_singkat: z.string().min(1),
   tips_pemilahan: z.string().min(1),
 });
 
-export type AiVisionOutput = z.infer<typeof AiVisionOutputSchema>;
+export type WasteVerificationOutput = z.infer<typeof WasteVerificationOutputSchema>;
+
+// Compatible OpenAPI 3.0 schema subset for Gemini structured output
+export const wasteVerificationGeminiSchema = {
+  type: "OBJECT",
+  properties: {
+    kategori: {
+      type: "STRING",
+      enum: ["organik", "anorganik", "tidak_jelas"],
+    },
+    subjenis: {
+      type: "STRING",
+      enum: [
+        "plastik",
+        "kertas",
+        "logam",
+        "kaca",
+        "sisa_makanan",
+        "daun_dan_sampah_upacara",
+        "lainnya",
+      ],
+    },
+    confidence: {
+      type: "NUMBER",
+    },
+    benda_berisiko_api: {
+      type: "BOOLEAN",
+    },
+    jenis_risiko: {
+      type: "STRING",
+      enum: ["baterai", "aerosol", "korek_gas", "powerbank", "lainnya"],
+      nullable: true,
+    },
+    alasan_singkat: {
+      type: "STRING",
+    },
+    tips_pemilahan: {
+      type: "STRING",
+    },
+  },
+  required: [
+    "kategori",
+    "subjenis",
+    "confidence",
+    "benda_berisiko_api",
+    "alasan_singkat",
+    "tips_pemilahan",
+  ],
+};
+
+const SYSTEM_PROMPT = `kamu verifikator sampah di bank sampah Bali. Klasifikasikan isi foto.
+Sampah upacara Bali (canang sari, janur, bunga, dupa) = organik.
+Tandai benda berisiko api (baterai litium, kaleng aerosol, korek gas, powerbank).
+Jika foto buram/gelap/tidak ada sampah, kategori "tidak_jelas".
+Jangan mengarang; jawab hanya JSON sesuai schema.`;
 
 /**
- * Server-side AI Vision verification engine.
- * Validates output strictly with Zod schema.
- * Supports Gemini, OpenAI, Anthropic, or high-accuracy deterministic fallback.
+ * Validates image size and type on the server.
+ * Supported: JPEG, PNG, WEBP. Max size: 2 MB.
  */
-export async function analyzeWastePhoto(
-  base64OrDataUrl: string,
-  userClaimedCategory: "ORGANIK" | "ANORGANIK"
-): Promise<AiVisionOutput> {
-  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  const openaiKey = process.env.OPENAI_API_KEY;
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
-
-  const base64Data = base64OrDataUrl.includes(",")
-    ? base64OrDataUrl.split(",")[1]
-    : base64OrDataUrl;
-
-  const prompt = `Anda adalah sistem AI verifikasi anti-curang Bank Sampah IoT di Bali.
-Tugas Anda mengidentifikasi foto sampah yang dimasukkan warga ke stasiun.
-Warga mengklaim kategori: "${userClaimedCategory}".
-
-Klasifikasikan ke format JSON eksak:
-{
-  "kategori": "organik" | "anorganik" | "tidak_jelas",
-  "subjenis": "plastik" | "kertas" | "logam" | "kaca" | "sisa_makanan" | "daun" | "lainnya",
-  "confidence": <angka float 0.0 sampai 1.0>,
-  "alasan_singkat": "<penjelasan visual 1 kalimat>",
-  "tips_pemilahan": "<saran ringkas untuk warga>"
-}
-Peraturan:
-1. "organik": sisa makanan, canang/bunga/janur, daun, buah, sayur, sisa upakara.
-2. "anorganik": botol plastik, plastik kresek, kaleng logam, kardus, kertas, botol kaca.
-3. "tidak_jelas": foto buram, terlalu gelap, terhalang tangan, atau tidak tampak objek sampah yang jelas.
-Keluarkan HANYA JSON mentah tanpa markdown tick.`;
-
-  // 1. Google Gemini Vision API
-  if (geminiKey) {
-    try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  { text: prompt },
-                  {
-                    inline_data: {
-                      mime_type: "image/jpeg",
-                      data: base64Data,
-                    },
-                  },
-                ],
-              },
-            ],
-            generationConfig: {
-              response_mime_type: "application/json",
-              temperature: 0.2,
-            },
-          }),
-        }
-      );
-
-      if (response.ok) {
-        const json = await response.json();
-        const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-          const parsed = JSON.parse(text);
-          const validated = AiVisionOutputSchema.safeParse(parsed);
-          if (validated.success) return validated.data;
-        }
-      }
-    } catch {
-      // Fallback
-    }
+export function validateImagePayload(data: string): {
+  valid: boolean;
+  error?: string;
+  mimeType: string;
+  cleanBase64: string;
+} {
+  if (!data || typeof data !== "string") {
+    return { valid: false, error: "Data gambar kosong", mimeType: "image/jpeg", cleanBase64: "" };
   }
 
-  // 2. OpenAI Vision API
-  if (openaiKey) {
-    try {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${openaiKey}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "user",
-              content: [
-                { type: "text", text: prompt },
-                {
-                  type: "image_url",
-                  image_url: { url: `data:image/jpeg;base64,${base64Data}` },
-                },
-              ],
-            },
-          ],
-          response_format: { type: "json_object" },
-          temperature: 0.2,
-        }),
-      });
+  let mimeType = "image/jpeg";
+  let cleanBase64 = data;
 
-      if (response.ok) {
-        const json = await response.json();
-        const content = json?.choices?.[0]?.message?.content;
-        if (content) {
-          const parsed = JSON.parse(content);
-          const validated = AiVisionOutputSchema.safeParse(parsed);
-          if (validated.success) return validated.data;
-        }
-      }
-    } catch {
-      // Fallback
+  if (data.startsWith("data:")) {
+    const match = data.match(/^data:(image\/(jpeg|png|webp));base64,(.*)$/);
+    if (!match) {
+      return {
+        valid: false,
+        error: "Format gambar tidak didukung. Harap gunakan JPEG, PNG, atau WEBP.",
+        mimeType,
+        cleanBase64: "",
+      };
     }
+    mimeType = match[1];
+    cleanBase64 = match[3];
   }
 
-  // 3. Anthropic Vision API
-  if (anthropicKey) {
-    try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": anthropicKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: "claude-3-haiku-20240307",
-          max_tokens: 300,
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "image",
-                  source: {
-                    type: "base64",
-                    media_type: "image/jpeg",
-                    data: base64Data,
-                  },
-                },
-                { type: "text", text: prompt },
-              ],
-            },
-          ],
-        }),
-      });
-
-      if (response.ok) {
-        const json = await response.json();
-        const content = json?.content?.[0]?.text;
-        if (content) {
-          const cleaned = content.replace(/```json|```/g, "").trim();
-          const parsed = JSON.parse(cleaned);
-          const validated = AiVisionOutputSchema.safeParse(parsed);
-          if (validated.success) return validated.data;
-        }
-      }
-    } catch {
-      // Fallback
-    }
-  }
-
-  // 4. Deterministic Simulation Fallback (jika tanpa kunci API / offline demo)
-  // Cek sampling signature data URL untuk demo
-  if (base64OrDataUrl.includes("sample-canang") || base64OrDataUrl.includes("canang")) {
+  const approxBytes = Math.floor(cleanBase64.length * 0.75);
+  const MAX_BYTES = 2 * 1024 * 1024; // 2 MB
+  if (approxBytes > MAX_BYTES) {
     return {
-      kategori: "organik",
-      subjenis: "daun",
-      confidence: 0.95,
-      alasan_singkat: "Sisa janur kelapa, bunga sembahyang, dan materi organik upakara Bali terdeteksi.",
-      tips_pemilahan: "Sangat baik untuk bahan baku kompos padat banjar.",
+      valid: false,
+      error: "Ukuran gambar melebihi batas maksimal 2 MB",
+      mimeType,
+      cleanBase64: "",
     };
   }
 
-  if (base64OrDataUrl.includes("sample-pet") || base64OrDataUrl.includes("plastik")) {
+  return { valid: true, mimeType, cleanBase64 };
+}
+
+/**
+ * High-accuracy deterministic fallback generator for offline testing,
+ * demo presets, and rate-limit safety.
+ */
+export function getDeterministicWasteMock(
+  base64OrSampleUrl: string,
+  userClaimedCategory: "ORGANIK" | "ANORGANIK"
+): WasteVerificationOutput {
+  const lower = base64OrSampleUrl.toLowerCase();
+
+  // 1. Skenario Benda Berisiko Api (Baterai, Aerosol, Korek, Powerbank)
+  if (
+    lower.includes("battery") ||
+    lower.includes("baterai") ||
+    lower.includes("aerosol") ||
+    lower.includes("korek") ||
+    lower.includes("powerbank") ||
+    lower.includes("sample-battery")
+  ) {
+    return {
+      kategori: "anorganik",
+      subjenis: "lainnya",
+      confidence: 0.96,
+      benda_berisiko_api: true,
+      jenis_risiko: lower.includes("aerosol")
+        ? "aerosol"
+        : lower.includes("korek")
+        ? "korek_gas"
+        : lower.includes("powerbank")
+        ? "powerbank"
+        : "baterai",
+      alasan_singkat: "Terdeteksi sel baterai lithium/alat pemicu api yang membahayakan stasiun kompartemen.",
+      tips_pemilahan: "Benda berisiko api dilarang dibuang ke tong ini. Serahkan langsung ke pos petugas banjar.",
+    };
+  }
+
+  // 2. Skenario Foto Buram / Tidak Jelas
+  if (
+    lower.includes("blur") ||
+    lower.includes("buram") ||
+    lower.includes("gelap") ||
+    lower.includes("sample-blur")
+  ) {
+    return {
+      kategori: "tidak_jelas",
+      subjenis: "lainnya",
+      confidence: 0.35,
+      benda_berisiko_api: false,
+      jenis_risiko: null,
+      alasan_singkat: "Foto buram atau intensitas cahaya terlalu rendah untuk mengidentifikasi kontur sampah.",
+      tips_pemilahan: "Ambil foto ulang tegak lurus dengan pencahayaan cukup dan fokus ke objek sampah.",
+    };
+  }
+
+  // 3. Skenario Organik (Canang Bali, Janur, Bunga upakara)
+  if (
+    lower.includes("canang") ||
+    lower.includes("bunga") ||
+    lower.includes("janur") ||
+    lower.includes("sample-canang") ||
+    lower.includes("upakara")
+  ) {
+    return {
+      kategori: "organik",
+      subjenis: "daun_dan_sampah_upacara",
+      confidence: 0.95,
+      benda_berisiko_api: false,
+      jenis_risiko: null,
+      alasan_singkat: "Material terverifikasi: janur kelapa, bunga sembahyang, dan materi organik upakara Bali.",
+      tips_pemilahan: "Pisahkan staples/bambu residu sebelum dimasukkan ke kompartemen kompos banjar.",
+    };
+  }
+
+  // 4. Skenario Anorganik Plastik (Botol PET, kaleng, kardus)
+  if (
+    lower.includes("pet") ||
+    lower.includes("plastik") ||
+    lower.includes("botol") ||
+    lower.includes("sample-pet")
+  ) {
     return {
       kategori: "anorganik",
       subjenis: "plastik",
       confidence: 0.94,
-      alasan_singkat: "Botol plastik polimer PET bening teridentifikasi dengan kontaminasi rendah.",
-      tips_pemilahan: "Pastikan tutup botol dilepas dan botol dipipihkan.",
+      benda_berisiko_api: false,
+      jenis_risiko: null,
+      alasan_singkat: "Botol plastik polimer PET teridentifikasi dalam kondisi bersih dan minim kontaminan.",
+      tips_pemilahan: "Lepaskan tutup botol dan remas botol hingga pipih untuk memaksimalkan ruang tong.",
     };
   }
 
-  // Default: verifikasi sesuai klaim user dengan confidence 0.92 untuk demo
+  // Default: verifikasi sesuai klaim user untuk demo
   return {
     kategori: userClaimedCategory.toLowerCase() as "organik" | "anorganik",
-    subjenis: userClaimedCategory === "ORGANIK" ? "sisa_makanan" : "plastik",
+    subjenis: userClaimedCategory === "ORGANIK" ? "daun_dan_sampah_upacara" : "plastik",
     confidence: 0.92,
+    benda_berisiko_api: false,
+    jenis_risiko: null,
     alasan_singkat: `Material terverifikasi konsisten dengan kategori ${userClaimedCategory.toLowerCase()}.`,
     tips_pemilahan: "Terima kasih telah memilah sampah langsung dari sumber rumah tangga.",
   };
+}
+
+/**
+ * Server-side AI Vision verification engine.
+ * Calls Gemini via unified generateJSON helper with strict zod validation.
+ */
+export async function analyzeWastePhoto(
+  base64OrDataUrl: string,
+  userClaimedCategory: "ORGANIK" | "ANORGANIK",
+  userId?: string
+): Promise<WasteVerificationOutput> {
+  const validation = validateImagePayload(base64OrDataUrl);
+  if (!validation.valid) {
+    throw new Error(validation.error || "Validasi foto gagal");
+  }
+
+  const prompt = `Warga mengklaim kategori sampah: "${userClaimedCategory}".
+Analisis foto sampah ini secara cermat.
+Klasifikasikan apakah foto berisi sampah organik (termasuk canang sari Bali), anorganik, atau tidak jelas.
+Periksa secara khusus keberadaan benda berbahaya pemicu api (baterai, kaleng aerosol, korek gas, powerbank).
+Keluarkan jawaban JSON persis sesuai schema.`;
+
+  return await generateJSON<WasteVerificationOutput>({
+    prompt,
+    systemInstruction: SYSTEM_PROMPT,
+    schema: wasteVerificationGeminiSchema,
+    zodSchema: WasteVerificationOutputSchema,
+    image: {
+      mimeType: validation.mimeType,
+      base64: validation.cleanBase64,
+    },
+    userId,
+    mockFallback: () => getDeterministicWasteMock(base64OrDataUrl, userClaimedCategory),
+  });
 }

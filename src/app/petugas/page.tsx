@@ -15,6 +15,8 @@ import {
   SlidersHorizontal,
   Check,
   XCircle,
+  AlertTriangle,
+  Flame,
 } from "lucide-react";
 
 interface ReviewSessionItem {
@@ -294,18 +296,29 @@ export default function PetugasPage() {
                   <div className="flex gap-2 overflow-x-auto pb-1">
                     {reviews.map((r) => {
                       const isSelected = (activeReview?.id === r.id);
+                      const hasFireRisk = Boolean(
+                        r.aiReason?.toLowerCase().includes("api") ||
+                        r.aiReason?.toLowerCase().includes("baterai") ||
+                        r.aiReason?.toLowerCase().includes("aerosol") ||
+                        r.aiReason?.toLowerCase().includes("korek")
+                      );
                       return (
                         <button
                           key={r.id}
                           type="button"
                           onClick={() => setSelectedReviewId(r.id)}
-                          className={`px-3 py-1.5 border text-xs font-bold uppercase tracking-wider transition shrink-0 cursor-pointer ${
+                          className={`px-3 py-1.5 border text-xs font-bold uppercase tracking-wider transition shrink-0 cursor-pointer flex items-center gap-1.5 ${
                             isSelected
-                              ? "border-[#1d1c19] bg-[#1d1c19] text-white shadow-xs"
+                              ? hasFireRisk
+                                ? "border-rose-600 bg-rose-700 text-white shadow-xs"
+                                : "border-[#1d1c19] bg-[#1d1c19] text-white shadow-xs"
+                              : hasFireRisk
+                              ? "border-rose-300 bg-rose-50 text-rose-800 hover:border-rose-600"
                               : "border-[#1d1c19]/20 bg-white text-[#55534c] hover:border-[#1d1c19]"
                           }`}
                         >
-                          {r.sessionCode}
+                          {hasFireRisk && <Flame className="size-3.5 text-rose-500" aria-label="Risiko api" />}
+                          <span>{r.sessionCode}</span>
                         </button>
                       );
                     })}
@@ -355,11 +368,34 @@ export default function PetugasPage() {
                       </div>
 
                       {activeReview.aiReason && (
-                        <div className="p-3 bg-white border border-[#1d1c19]/15 text-[11px] leading-relaxed">
-                          <span className="text-[10px] text-[#84827a] uppercase font-bold block mb-1">
-                            Alasan Sistem Meminta Tinjauan Petugas:
-                          </span>
-                          <p className="text-[#55534c]">{activeReview.aiReason}</p>
+                        <div
+                          className={`p-3 border text-[11px] leading-relaxed ${
+                            activeReview.aiReason.toLowerCase().includes("api") ||
+                            activeReview.aiReason.toLowerCase().includes("baterai") ||
+                            activeReview.aiReason.toLowerCase().includes("aerosol") ||
+                            activeReview.aiReason.toLowerCase().includes("korek")
+                              ? "bg-rose-50 border-rose-600/40 text-rose-950"
+                              : "bg-white border-[#1d1c19]/15 text-[#55534c]"
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 font-bold mb-1">
+                            {activeReview.aiReason.toLowerCase().includes("api") ||
+                            activeReview.aiReason.toLowerCase().includes("baterai") ? (
+                              <span className="text-[10px] text-rose-700 uppercase tracking-wider flex items-center gap-1">
+                                <AlertTriangle className="size-3.5 text-rose-600 inline" /> PERINGATAN BAHAYA: RISIKO API TERDETEKSI
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-[#84827a] uppercase">
+                                Alasan Sistem Meminta Tinjauan Petugas:
+                              </span>
+                            )}
+                          </div>
+                          <p>{activeReview.aiReason}</p>
+                          {activeReview.aiTips && (
+                            <p className="mt-1.5 text-[10px] opacity-90 border-t border-rose-200/60 pt-1.5">
+                              <strong>Tindakan Edukasi:</strong> {activeReview.aiTips}
+                            </p>
+                          )}
                         </div>
                       )}
 

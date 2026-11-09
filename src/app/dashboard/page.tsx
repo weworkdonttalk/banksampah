@@ -5,6 +5,7 @@ import PearCanvas from "@/components/webgl/pear-canvas";
 import RiskScoreWidget from "@/components/ops/risk-score-widget";
 import CylinderGauge from "@/components/ops/cylinder-gauge";
 import ChokeModeControl from "@/components/ops/choke-mode-control";
+import { calculateFireRisk } from "@/lib/risk";
 import { playSuccessChime, playSirenSound } from "@/lib/audio-alert";
 import {
   Flame,
@@ -510,13 +511,30 @@ export default function OpsHazardPage() {
             />
 
             {/* HARDWARE INSTRUMENT: RISK SCORE GAUGE */}
-            <RiskScoreWidget
-              score={isSimulatedFire ? 88 : currentStationInfo.fill > 80 ? 45 : 12}
-              level={isSimulatedFire ? "HAZARD" : currentStationInfo.fill > 80 ? "WARNING" : "NORMAL"}
-              temperature={isSimulatedFire ? 58.4 : tempData[tempData.length - 1]}
-              gasPpm={isSimulatedFire ? 485 : gasData[gasData.length - 1]}
-              isWaitingSensor={isWaitingSensor}
-            />
+            {(() => {
+              const currentTemp = isSimulatedFire ? 58.4 : (tempData[tempData.length - 1] ?? 31.2);
+              const currentGas = isSimulatedFire ? 485 : (gasData[gasData.length - 1] ?? 120);
+              const prevTemp = isSimulatedFire ? 51.0 : (tempData[tempData.length - 2] ?? currentTemp);
+              const prevGas = isSimulatedFire ? 340 : (gasData[gasData.length - 2] ?? currentGas);
+              const riskResult = calculateFireRisk({
+                temperature: currentTemp,
+                gasPpm: currentGas,
+                prevTemperature: prevTemp,
+                prevGasPpm: prevGas,
+                deltaTimeSeconds: 60,
+              });
+              const levelMapped = riskResult.level === "BAHAYA" ? "HAZARD" : riskResult.level === "WASPADA" ? "WARNING" : "NORMAL";
+
+              return (
+                <RiskScoreWidget
+                  score={riskResult.score}
+                  level={levelMapped}
+                  temperature={currentTemp}
+                  gasPpm={currentGas}
+                  isWaitingSensor={isWaitingSensor}
+                />
+              );
+            })()}
 
             {/* HARDWARE ACTUATOR: CHOKE MODE VALVE CONTROL */}
             <ChokeModeControl
