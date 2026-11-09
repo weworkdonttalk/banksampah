@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { dbService } from "@/lib/db-service";
+import { getGeminiClient, getGeminiModel, logAiError } from "@/lib/ai/gemini";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const stations = await dbService.getAllStations();
     const station = stations[0];
@@ -25,37 +26,6 @@ export async function GET() {
     const avgSmoke = Math.round(smokes.reduce((a, b) => a + b, 0) / smokes.length);
     const alertCount = station.alerts?.length || 0;
 
-    const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    if (geminiKey) {
-      try {
-        const prompt = `Bertindak sebagai ahli keselamatan TPST & IoT Lingkungan Bali. 
-Analisis data sensor 24 jam stasiun ${station.name}:
-- Suhu: Min ${minTemp}°C, Max ${maxTemp}°C, Rata-rata ${avgTemp}°C
-- Asap/Gas: Rata-rata ${avgSmoke} PPM, Max ${maxSmoke} PPM
-- Jumlah Alert Aktif: ${alertCount}
-
-Buat ringkasan eksekutif 2-3 paragraf Bahasa Indonesia yang tajam dan rekomendasi mitigasi risiko kebakaran sampah khas iklim tropis Bali.`;
-
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-          }),
-        });
-
-        if (res.ok) {
-          const resData = await res.json();
-          const text = resData.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (text) return NextResponse.json({ insight: text });
-        }
-      } catch (e) {
-        console.warn("LLM daily analysis failed, using high-fidelity fallback:", e);
-      }
-    }
-
-    // High fidelity fallback summary
     const fallbackInsight = `📊 RINGKASAN MONITORING 24 JAM (${station.name}):
 Suhu rata-rata tercatat di angka stabil ${avgTemp}°C (rentang ${minTemp}°C - ${maxTemp}°C). Konsentrasi gas metana/asap terpantau rata-rata ${avgSmoke} PPM dengan puncak ${maxSmoke} PPM saat fermentasi material organik siang hari.
 
@@ -66,8 +36,37 @@ Total ${alertCount} indikasi anomali termal terdeteksi dalam 24 jam terakhir. La
 1. Lanjutkan pemisahan residu canang basah dari plastik kering untuk mencegah hotspot biologis.
 2. Lakukan inspeksi visual pada tumpukan kardus saat terik matahari pukul 12:00 - 14:00 WITA.`;
 
+    const client = getGeminiClient();
+    if (client && process.env.AI_MOCK !== "true") {
+      try {
+        const prompt = `Bertindak sebagai ahli keselamatan TPST & IoT Lingkungan Bali. 
+Analisis data sensor 24 jam stasiun ${station.name}:
+- Suhu: Min ${minTemp}°C, Max ${maxTemp}°C, Rata-rata ${avgTemp}°C
+- Asap/Gas: Rata-rata ${avgSmoke} PPM, Max ${maxSmoke} PPM
+- Jumlah Alert Aktif: ${alertCount}
+
+Buat ringkasan eksekutif 2-3 paragraf Bahasa Indonesia yang tajam dan rekomendasi mitigasi risiko kebakaran sampah khas iklim tropis Bali.`;
+
+        const model = getGeminiModel();
+        const response = await client.models.generateContent({
+          model,
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          config: {
+            temperature: 0.3,
+            abortSignal: AbortSignal.timeout(15000),
+          },
+        });
+
+        const text = response.text;
+        if (text) return NextResponse.json({ insight: text });
+      } catch (e) {
+        logAiError("daily_analysis", e);
+      }
+    }
+
     return NextResponse.json({ insight: fallbackInsight });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Terjadi kesalahan";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

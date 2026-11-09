@@ -6,6 +6,22 @@ import dynamic from "next/dynamic";
 import PearCanvas from "@/components/webgl/pear-canvas";
 import SmoothScrollProvider from "@/components/landing/smooth-scroll-provider";
 import { playSuccessChime } from "@/lib/audio-alert";
+import {
+  ArrowUpRight,
+  ChevronLeft,
+  ChevronRight,
+  CircleCheck,
+  Cpu,
+  Droplets,
+  Flame,
+  Gauge,
+  Leaf,
+  Menu,
+  Radio,
+  ShieldCheck,
+  Sparkles,
+  X,
+} from "lucide-react";
 
 const HeroThreeCanvas = dynamic(
   () => import("@/components/landing/hero-three-canvas"),
@@ -216,15 +232,13 @@ export default function PearLandingPage() {
       {/* 2. MAIN STAGE: CHAPTER 1 — THE MODEL (#top & #model) */}
       <section
         id="model"
-        className="relative z-10 min-h-screen px-6 sm:px-12 lg:px-16 pt-12 sm:pt-28 md:pt-32 pb-16 sm:pb-24 max-w-5xl mx-auto flex flex-col justify-between"
+        className="relative z-10 min-h-screen px-6 sm:px-12 lg:px-16 pt-12 sm:pt-20 md:pt-28 pb-12 sm:pb-16 max-w-5xl mx-auto flex flex-col justify-between"
       >
         <div className="pt-0 sm:pt-4 md:pt-6">
           <div
             className="inline-flex items-center gap-2 font-gt-mono text-[10px] text-[#55534c] tracking-widest uppercase mb-4 sm:mb-6 border border-[#1d1c19]/15 px-2.5 py-1 bg-[#f2f1ed]/60 backdrop-blur-sm"
           >
-            <svg viewBox="0 0 24 24" className="star-mark">
-              <path d="M12 0Q13.1 10.9 24 12Q13.1 13.1 0 12Q10.9 10.9 12 0Z" />
-            </svg>
+            <Radio className="size-3 text-[#015186]" aria-hidden="true" />
             <span>PENGELOLAAN SAMPAH PINTAR BALI // 08°39′LS 115°13′BT</span>
           </div>
 
@@ -247,7 +261,7 @@ export default function PearLandingPage() {
             >
               <span className="cta-flood" />
               <span className="relative z-10">Masuk Portal Multi-Peran</span>
-              <span className="relative z-10 transition-transform group-hover:translate-x-1">→</span>
+              <ArrowUpRight className="relative z-10 size-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" aria-hidden="true" />
             </Link>
 
             <Link
@@ -261,14 +275,14 @@ export default function PearLandingPage() {
 
         {/* 3-Beat Rhythm Switcher & The Stand Column */}
         <div
-          className="mt-12 sm:mt-20 pt-8 sm:pt-10 border-t border-[#1d1c19]/15 grid grid-cols-1 md:grid-cols-12 gap-6 sm:gap-8 items-start"
+          className="mt-12 sm:mt-16 lg:mt-20 pt-8 sm:pt-10 border-t border-[#1d1c19]/15 grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-6 md:gap-8 items-start"
         >
           {/* Left: 3-Beat Controls */}
-          <div className="md:col-span-5 space-y-3 text-xl sm:text-2xl font-bold">
+          <div className="md:col-span-5 space-y-2 sm:space-y-3 text-lg sm:text-xl md:text-2xl font-bold">
             {[
               { beat: 0, text: "Kami deteksi dini." },
               { beat: 1, text: "Kami beri peringatan cepat." },
-              { beat: 2, text: "Kami pantau real-time." },
+              { beat: 2, text: "Kami verifikasi dengan AI." },
             ].map((b) => (
               <button
                 key={b.beat}
@@ -285,40 +299,40 @@ export default function PearLandingPage() {
           </div>
 
           {/* Right: Stacked Prose Panels (Zero jump, continuous crossfade) */}
-          <div className="md:col-span-7 space-y-4">
+          <div className="md:col-span-7 space-y-2 sm:space-y-4">
             <div className="grid grid-cols-1 grid-rows-1 min-h-[96px]">
               <p
                 className={`font-gt-sans text-sm sm:text-base text-[#33322d] leading-relaxed font-normal beat-panel ${
                   activeBeat === 0 ? "beat-panel-active" : "beat-panel-inactive"
                 }`}
               >
-                Sensor suhu, gas, dan asap di setiap stasiun EcoSort membaca kondisi lingkungan secara terus-menerus. Kenaikan suhu atau lonjakan gas dan asap langsung terdeteksi sebelum api sempat membesar.
+                Sensor suhu, gas, dan asap di setiap stasiun membaca kondisi lingkungan terus-menerus. AI menghitung skor risiko dari laju kenaikan ketiga sensor, jadi tanda awal kebakaran terbaca sebelum api membesar.
               </p>
               <p
                 className={`font-gt-sans text-sm sm:text-base text-[#33322d] leading-relaxed font-normal beat-panel ${
                   activeBeat === 1 ? "beat-panel-active" : "beat-panel-inactive"
                 }`}
               >
-                Saat nilai sensor melewati ambang batas, status berubah dari aman ke waspada atau bahaya. Peringatan langsung muncul di dashboard dan dikirim ke pengelola desa adat, lengkap dengan lokasi stasiun dan nilai sensornya.
+                Saat skor risiko naik, status berubah dari aman ke waspada atau bahaya. Peringatan langsung muncul di dashboard beserta penjelasan AI dan saran tindakan, sehingga pengelola banjar tahu apa yang harus dilakukan, bukan hanya angka mentah.
               </p>
               <p
                 className={`font-gt-sans text-sm sm:text-base text-[#33322d] leading-relaxed font-normal beat-panel ${
                   activeBeat === 2 ? "beat-panel-active" : "beat-panel-inactive"
                 }`}
               >
-                Data suhu, gas, dan asap tampil langsung di dashboard lewat HP maupun laptop, lengkap dengan grafik riwayat dan status alat online atau offline. Desa adat bisa memantau kondisi lingkungan kapan pun.
+                Warga memasukkan sampah, sensor mendeteksinya, lalu AI vision memeriksa foto untuk memastikan jenisnya sesuai dan menandai benda berisiko api seperti baterai atau kaleng aerosol. Saldo masuk otomatis, transparan, dan sulit dicurangi.
               </p>
             </div>
 
             <div className="pt-2 flex items-center justify-between font-gt-mono text-xs text-[#55534c] border-t border-[#1d1c19]/10">
               <span className="uppercase text-[10px] tracking-widest">
                 {activeBeat === 0
-                  ? "[ SENSOR SUHU \u00B7 GAS \u00B7 ASAP ]"
+                  ? "[ SENSOR SUHU \u00B7 GAS \u00B7 ASAP \u00B7 SKOR RISIKO AI ]"
                   : activeBeat === 1
-                  ? "[ ALERT OTOMATIS \u00B7 DASHBOARD + TELEGRAM ]"
-                  : "[ MONITORING REAL-TIME \u00B7 RIWAYAT DATA ]"}
+                  ? "[ ALERT OTOMATIS \u00B7 PENJELASAN AI \u00B7 DASHBOARD ]"
+                  : "[ MODEL KEMITRAAN BANJAR \u00B7 AI VISION GEMINI ]"}
               </span>
-              <span className="text-[#015186] font-bold">PANTAU REAL-TIME</span>
+              <span className="text-[#015186] font-bold">SENSOR + AI</span>
             </div>
           </div>
         </div>
@@ -327,15 +341,15 @@ export default function PearLandingPage() {
       {/* 3. SECTION: CHAPTER 2 — THE WORK (#work) */}
       <section
         id="work"
-        className="relative z-10 min-h-screen px-6 sm:px-12 lg:px-16 py-16 sm:py-24 lg:py-32 max-w-5xl mx-auto border-t border-[#1d1c19]/15"
+        className="relative z-10 min-h-screen px-6 sm:px-12 lg:px-16 py-12 sm:py-16 lg:py-24 max-w-5xl mx-auto border-t border-[#1d1c19]/15"
       >
         <div
           data-reveal="50"
-          className="reveal-on-scroll flex flex-wrap items-baseline justify-between mb-16 pb-2"
+          className="reveal-on-scroll flex flex-wrap items-baseline justify-between mb-10 sm:mb-16 pb-2"
         >
           <div>
             <span className="font-gt-mono text-[10px] text-[#84827a] uppercase tracking-widest block">
-              BAB 2 &middot; TEKNOLOGI IOT
+              BAB 2 · TEKNOLOGI IOT
             </span>
             <h2 className="text-2xl sm:text-4xl font-bold text-[#1d1c19] mt-1">
               Semua sistem keselamatan dan penimbangan dalam satu stasiun.
@@ -347,72 +361,74 @@ export default function PearLandingPage() {
         </div>
 
         {/* 3 Editorial Work Cards (Staggered scroll lift) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* Card 01 */}
-          <div
-            data-reveal="120"
-            className="reveal-card border border-[#1d1c19]/15 bg-[#f2f1ed]/80 backdrop-blur-sm p-6 flex flex-col justify-between group"
-          >
-            <span className="font-gt-mono text-[10px] uppercase tracking-widest text-[#84827a] block mb-4">
-              01 &middot; SENSORIK &amp; TELEMETRI
-            </span>
-            <div>
-              <h3 className="text-lg font-bold text-[#1d1c19] mb-3 leading-snug">
-                Sensor ultrasonik &amp; pemetaan kapasitas wadah.
-              </h3>
-              <p className="font-gt-sans text-xs text-[#55534c] leading-relaxed">
-                Sensor jarak ultrasonik memindai volume tong sampah secara kontinu (0–100%). Panggilan armada truk DLH dipicu secara otomatis saat kapasitas mencapai batas 84%, mencegah penumpukan liar.
-              </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+            <div
+              data-reveal="120"
+              className="reveal-card rounded-sm border border-[#1d1c19]/12 bg-white/55 backdrop-blur-sm p-5 sm:p-6 flex flex-col justify-between group hover:bg-white/90 hover:border-[#0f766e]/50 transition-colors"
+            >
+              <span className="font-gt-mono text-[9px] sm:text-[10px] uppercase tracking-widest text-[#84827a] block mb-3 flex items-center gap-1.5">
+                <Gauge className="size-3.5 text-[#0f766e]" aria-hidden="true" />
+                01 · SENSORIK & TELEMETRI
+              </span>
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-[#1d1c19] mb-2 sm:mb-3 leading-snug">
+                  Sensor ultrasonik &amp; kapasitas wadah.
+                </h3>
+                <p className="font-gt-sans text-xs text-[#55534c] leading-relaxed">
+                  Memindai volume (0–100%). Armada otomatis saat 84%, cegah penumpukan liar.
+                </p>
+              </div>
+              <div className="mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-[#1d1c19]/10 font-gt-mono text-[9px] text-[#015186] flex justify-between">
+                <span>LATENSI: 14MS</span>
+                <span className="text-[#0f766e]">ESP32-S3</span>
+              </div>
             </div>
-            <div className="mt-6 pt-4 border-t border-[#1d1c19]/10 font-gt-mono text-[10px] text-[#015186] flex justify-between">
-              <span>LATENSI: 14MS</span>
-              <span>ESP32-S3 CORE</span>
-            </div>
-          </div>
 
-          {/* Card 02 */}
-          <div
-            data-reveal="240"
-            className="reveal-card border border-[#1d1c19]/15 bg-[#f2f1ed]/80 backdrop-blur-sm p-6 flex flex-col justify-between group"
-          >
-            <span className="font-gt-mono text-[10px] uppercase tracking-widest text-[#84827a] block mb-4">
-              02 &middot; DETEKSI SUHU, GAS &amp; ASAP
-            </span>
-            <div>
-              <h3 className="text-lg font-bold text-[#1d1c19] mb-3 leading-snug">
-                Peringatan otomatis saat nilai sensor melewati batas.
-              </h3>
-              <p className="font-gt-sans text-xs text-[#55534c] leading-relaxed">
-                Sensor suhu, gas, dan asap memantau kondisi lingkungan secara real-time. Lonjakan gas atau kenaikan suhu langsung memicu peringatan waspada dan bahaya ke dashboard pengelola.
-              </p>
+            {/* Card 02 */}
+            <div
+              data-reveal="240"
+              className="reveal-card rounded-sm border border-[#1d1c19]/12 bg-white/55 backdrop-blur-sm p-5 sm:p-6 flex flex-col justify-between group hover:bg-white/90 hover:border-[#015186]/50 transition-colors"
+            >
+              <span className="font-gt-mono text-[9px] sm:text-[10px] uppercase tracking-widest text-[#84827a] block mb-3 flex items-center gap-1.5">
+                <Flame className="size-3.5 text-[#015186]" aria-hidden="true" />
+                02 · DETEKSI SUHU, GAS & ASAP
+              </span>
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-[#1d1c19] mb-2 sm:mb-3 leading-snug">
+                  Alert otomatis melampaui batas.
+                </h3>
+                <p className="font-gt-sans text-xs text-[#55534c] leading-relaxed">
+                  Real-time monitoring. Lonjakan gas atau suhu langsung alert waspada/bahaya.
+                </p>
+              </div>
+              <div className="mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-[#1d1c19]/10 font-gt-mono text-[9px] text-[#015186] flex justify-between">
+                <span>RESPON: REAL-TIME</span>
+                <span>SUHU · GAS · ASAP</span>
+              </div>
             </div>
-            <div className="mt-6 pt-4 border-t border-[#1d1c19]/10 font-gt-mono text-[10px] text-[#015186] flex justify-between">
-              <span>RESPON: REAL-TIME</span>
-              <span>SUHU · GAS · ASAP</span>
-            </div>
-          </div>
 
-          {/* Card 03 */}
-          <div
-            data-reveal="360"
-            className="reveal-card border border-[#1d1c19]/15 bg-[#f2f1ed]/80 backdrop-blur-sm p-6 flex flex-col justify-between group"
-          >
-            <span className="font-gt-mono text-[10px] uppercase tracking-widest text-[#84827a] block mb-4">
-              03 &middot; EKONOMI SIRKULAR
-            </span>
-            <div>
-              <h3 className="text-lg font-bold text-[#1d1c19] mb-3 leading-snug">
-                Poin reward digital dan insentif nyata untuk warga.
-              </h3>
-              <p className="font-gt-sans text-xs text-[#55534c] leading-relaxed">
-                Setoran plastik PET, kardus, dan limbah upakara diverifikasi AI secara presisi. Poin warga dapat langsung ditukar dengan token listrik PLN dan kebutuhan desa adat.
-              </p>
+            {/* Card 03 */}
+            <div
+              data-reveal="360"
+              className="reveal-card rounded-sm border border-[#1d1c19]/12 bg-white/55 backdrop-blur-sm p-5 sm:p-6 flex flex-col justify-between group hover:bg-white/90 hover:border-emerald-500/50 transition-colors"
+            >
+              <span className="font-gt-mono text-[9px] sm:text-[10px] uppercase tracking-widest text-[#84827a] block mb-3 flex items-center gap-1.5">
+                <Leaf className="size-3.5 text-emerald-700" aria-hidden="true" />
+                03 · EKONOMI SIRKULAR
+              </span>
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-[#1d1c19] mb-2 sm:mb-3 leading-snug">
+                  Poin reward &amp; insentif nyata.
+                </h3>
+                <p className="font-gt-sans text-xs text-[#55534c] leading-relaxed">
+                  PET, kardus, limbah upakara diverifikasi AI. Poin tukar token listrik PLN.
+                </p>
+              </div>
+              <div className="mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-[#1d1c19]/10 font-gt-mono text-[9px] text-emerald-700 flex justify-between">
+                <span>STANDAR: IPCC 2026</span>
+                <span>POIN OTOMATIS</span>
+              </div>
             </div>
-            <div className="mt-6 pt-4 border-t border-[#1d1c19]/10 font-gt-mono text-[10px] text-[#015186] flex justify-between">
-              <span>STANDAR: IPCC 2026</span>
-              <span>POIN OTOMATIS</span>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -424,7 +440,7 @@ export default function PearLandingPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
           <div data-reveal="100" className="reveal-on-scroll lg:col-span-7 space-y-6">
             <span className="font-gt-mono text-[10px] text-[#84827a] uppercase tracking-widest block">
-              BAB 3 &middot; KETENTUAN BERSAMA
+              BAB 3 · KETENTUAN BERSAMA
             </span>
             <h2 className="text-3xl sm:text-5xl font-bold text-[#1d1c19] leading-tight">
               Tanpa biaya di awal. Berbagi hasil nilai daur ulang.
@@ -465,7 +481,7 @@ export default function PearLandingPage() {
                 href="/dashboard"
                 className="font-gt-mono text-xs uppercase tracking-wider text-[#015186] font-bold hover:underline"
               >
-                Lihat Monitoring Terkoneksi &rarr;
+                Lihat Monitoring Terkoneksi →
               </Link>
             </div>
           </div>
@@ -479,7 +495,7 @@ export default function PearLandingPage() {
       >
         <div data-reveal="50" className="reveal-on-scroll text-center mb-16">
           <span className="font-gt-mono text-[10px] text-[#84827a] uppercase tracking-widest block">
-            BAB 4 &middot; PERTANYAAN UMUM
+            BAB 4 · PERTANYAAN UMUM
           </span>
           <h2 className="text-2xl sm:text-4xl font-bold text-[#1d1c19] mt-2">
             Pertanyaan yang Sering Diajukan
@@ -491,21 +507,17 @@ export default function PearLandingPage() {
 
         {/* 3D FAQ Perspective Carousel */}
         <div data-reveal="200" className="reveal-on-scroll faq-stage relative max-w-2xl mx-auto">
-          <div className="faq-card-3d border border-[#1d1c19]/20 bg-[#f2f1ed] p-6 sm:p-8 shadow-xl relative min-h-[270px] flex flex-col justify-between">
-            <div className="flex justify-between items-center text-[#84827a] mb-4">
-              <svg viewBox="0 0 24 24" className="star-mark">
-                <path d="M12 0Q13.1 10.9 24 12Q13.1 13.1 0 12Q10.9 10.9 12 0Z" />
-              </svg>
+          <div className="faq-card-3d rounded-sm border border-[#1d1c19]/15 bg-white p-7 sm:p-9 shadow-sm hover:shadow-md transition-shadow relative min-h-[280px] flex flex-col justify-between">
+            <div className="flex justify-between items-center text-[#84827a] mb-5">
+              <Sparkles className="size-4 text-[#0f766e]" aria-hidden="true" />
               <span className="font-gt-mono text-[10px] tracking-widest uppercase">
-                PERTANYAAN {activeFaqIndex + 1} DARI {FAQS.length}
+                PERTANYAAN {activeFaqIndex + 1}/{FAQS.length}
               </span>
-              <svg viewBox="0 0 24 24" className="star-mark">
-                <path d="M12 0Q13.1 10.9 24 12Q13.1 13.1 0 12Q10.9 10.9 12 0Z" />
-              </svg>
+              <ShieldCheck className="size-4 text-[#015186]" aria-hidden="true" />
             </div>
 
             <div key={activeFaqIndex} className="animate-crossfade">
-              <h3 className="text-xl sm:text-2xl font-bold text-[#1d1c19] mb-3">
+              <h3 className="text-lg sm:text-xl font-bold text-[#1d1c19] mb-4">
                 {FAQS[activeFaqIndex].question}
               </h3>
               <p className="font-gt-sans text-sm text-[#33322d] leading-relaxed">
@@ -514,23 +526,26 @@ export default function PearLandingPage() {
             </div>
 
             {/* Stepper Controls */}
-            <div className="pt-6 border-t border-[#1d1c19]/10 flex items-center justify-between font-gt-mono text-xs">
+            <div className="pt-6 border-t border-[#1d1c19]/10 flex items-center justify-between gap-2">
               <button
                 onClick={() =>
                   setActiveFaqIndex((prev) => (prev > 0 ? prev - 1 : FAQS.length - 1))
                 }
-                className="text-[#55534c] hover:text-[#1d1c19] uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-colors min-h-[44px] py-2 px-1"
+                className="text-[#55534c] hover:text-[#1d1c19] hover:bg-[#f2f1ed] font-gt-mono text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-colors min-h-[44px] px-3 py-2 rounded-sm"
+                aria-label="Pertanyaan sebelumnya"
               >
-                &larr; SEBELUMNYA
+                <ChevronLeft className="size-4" />
+                <span className="hidden sm:inline">PREV</span>
               </button>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-1 justify-center">
                 {FAQS.map((_, i) => (
                   <button
                     key={i}
                     onClick={() => setActiveFaqIndex(i)}
-                    className={`h-1.5 transition-all cursor-pointer ${
-                      activeFaqIndex === i ? "w-6 bg-[#1d1c19]" : "w-2 bg-[#84827a]/40"
+                    className={`h-2 transition-all cursor-pointer rounded-full ${
+                      activeFaqIndex === i ? "w-8 bg-[#1d1c19]" : "w-2 bg-[#84827a]/30 hover:bg-[#84827a]/60"
                     }`}
+                    aria-label={`Go to question ${i + 1}`}
                   />
                 ))}
               </div>
@@ -538,9 +553,11 @@ export default function PearLandingPage() {
                 onClick={() =>
                   setActiveFaqIndex((prev) => (prev < FAQS.length - 1 ? prev + 1 : 0))
                 }
-                className="text-[#55534c] hover:text-[#1d1c19] uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-colors min-h-[44px] py-2 px-1"
+                className="text-[#55534c] hover:text-[#1d1c19] hover:bg-[#f2f1ed] font-gt-mono text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-colors min-h-[44px] px-3 py-2 rounded-sm"
+                aria-label="Pertanyaan berikutnya"
               >
-                SELANJUTNYA &rarr;
+                <span className="hidden sm:inline">NEXT</span>
+                <ChevronRight className="size-4" />
               </button>
             </div>
           </div>
@@ -622,7 +639,7 @@ export default function PearLandingPage() {
                 href="/login"
                 className="w-full min-h-[44px] border border-white/40 bg-white text-black py-2.5 font-bold uppercase tracking-wider hover:bg-zinc-200 transition text-center block"
               >
-                Portal Masuk Desa Adat &rarr;
+                Portal Masuk Desa Adat →
               </Link>
             </div>
           </div>
@@ -631,7 +648,7 @@ export default function PearLandingPage() {
             data-reveal="500"
             className="reveal-on-scroll pt-8 border-t border-[#ffffff1a] flex flex-wrap justify-between items-center text-[10px] font-gt-mono text-[#84827a]"
           >
-            <span>&copy; 2026 EcoSort Bali &middot; Inovasi Pengelolaan Sampah Berbasis Desa Adat</span>
+            <span>© 2026 EcoSort Bali · Inovasi Pengelolaan Sampah Berbasis Desa Adat</span>
             <span>SIMBOL LINGKUNGAN BERKELANJUTAN BALI</span>
           </div>
         </div>
@@ -716,7 +733,7 @@ export default function PearLandingPage() {
                       type="submit"
                       className="w-full min-h-[46px] border border-white bg-white text-black py-3 font-bold uppercase tracking-wider text-xs hover:bg-zinc-200 transition cursor-pointer"
                     >
-                      Kirim Formulir Pendaftaran &rarr;
+                      Kirim Formulir Pendaftaran →
                     </button>
                   </div>
                 </form>

@@ -1,38 +1,6 @@
 @import "tailwindcss";
 
 @font-face {
-  font-family: "Flecha S";
-  src: url("/fonts/FlechaS-Light.woff2") format("woff2");
-  font-weight: 300;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Flecha S";
-  src: url("/fonts/FlechaS-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Flecha L";
-  src: url("/fonts/FlechaL-Light.woff2") format("woff2");
-  font-weight: 300;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Flecha L";
-  src: url("/fonts/FlechaL-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
   font-family: "GT Standard L";
   src: url("/fonts/GTStandardL-Regular.woff2") format("woff2");
   font-weight: 400;
@@ -69,8 +37,6 @@
   --color-sky: #015186;
   --color-accent: #0f766e;
   
-  --font-serif: "GT Standard L", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-serif-l: "GT Standard L", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-sans: "GT Standard L", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: "GT Standard Mono", ui-monospace, "SF Mono", Menlo, monospace;
 }
@@ -85,8 +51,6 @@ html, body {
 }
 
 /* Typography — strictly 2 fonts: Sans (primary) and Mono (data/telemetry) */
-.font-flecha { font-family: var(--font-sans); font-weight: 600; letter-spacing: -0.02em; }
-.font-flecha-l { font-family: var(--font-sans); font-weight: 600; letter-spacing: -0.03em; }
 .font-gt-mono { font-family: var(--font-mono); }
 .font-gt-sans { font-family: var(--font-sans); }
 

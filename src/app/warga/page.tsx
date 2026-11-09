@@ -21,7 +21,12 @@ import {
   Wind,
   Flame,
   Activity,
+  AlertTriangle,
+  Leaf,
+  Droplet,
   Zap,
+  BatteryWarning,
+  ImageOff,
 } from "lucide-react";
 
 interface StationItem {
@@ -861,6 +866,34 @@ export default function CircularExchangePage() {
                       </button>
                     </div>
                   )}
+
+                  {activeSession.status === "NEEDS_REVIEW" && (
+                    <div className="p-3 bg-rose-50 border border-rose-600/40 text-rose-950 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="size-4 text-rose-600 shrink-0" />
+                        <span className="font-bold text-xs uppercase tracking-wider text-rose-900">
+                          {activeSession.aiReason?.toLowerCase().includes("api") || activeSession.aiReason?.toLowerCase().includes("baterai")
+                            ? "Peringatan Bahaya Kebakaran"
+                            : "Menunggu Tinjauan Fisik Petugas"}
+                        </span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed">
+                        {activeSession.aiReason || "Setoran sampah Anda memerlukan konfirmasi manual oleh petugas banjar. Saldo reward tertahan sementara sampai diperiksa."}
+                      </p>
+                      {activeSession.aiTips && (
+                        <div className="p-2 bg-white/80 border border-rose-200 text-[10px] text-rose-900 leading-normal">
+                          <strong>Panduan Pemilahan:</strong> {activeSession.aiTips}
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setActiveSession(null)}
+                        className="mt-1 text-[10px] text-rose-800 underline font-bold uppercase tracking-wider cursor-pointer"
+                      >
+                        Tutup Sesi Ini
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -1145,24 +1178,45 @@ export default function CircularExchangePage() {
               </div>
 
               {/* SHORTCUT PRESET SIMULATOR 1-KLIK DESKTOP */}
-              <div className="p-3 bg-[#fbfbfa] border border-[#1d1c19]/15 space-y-1.5 text-[10px]">
-                <span className="text-[#84827a] font-bold uppercase block">
-                  Uji Coba Cepat Preset (Tanpa Kamera):
-                </span>
-                <div className="flex gap-2">
+              <div className="p-3 bg-[#fbfbfa] border border-[#1d1c19]/15 space-y-2 text-[10px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-[#84827a] font-bold uppercase block">
+                    Uji Coba Cepat Preset AI (4 Skenario Uji):
+                  </span>
+                  <span className="text-[9px] text-[#015186] font-mono">1-Klik Simulasi</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => handleQuickPreset("ORGANIK", "/samples/sample-canang.png")}
-                    className="flex-1 py-1.5 bg-white border border-[#1d1c19]/20 hover:border-[#1d1c19] font-bold cursor-pointer active:scale-95"
+                    className="min-h-10 py-2 px-2 bg-white border border-[#1d1c19]/20 hover:border-emerald-700 hover:bg-emerald-50/50 font-bold cursor-pointer active:scale-95 text-left transition flex items-center gap-1.5"
                   >
-                    Foto Canang Organik
+                    <Leaf className="size-3.5 text-emerald-700 shrink-0" aria-hidden="true" />
+                    <span>1. Canang Organik</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => handleQuickPreset("ANORGANIK", "/samples/sample-pet.png")}
-                    className="flex-1 py-1.5 bg-white border border-[#1d1c19]/20 hover:border-[#1d1c19] font-bold cursor-pointer active:scale-95"
+                    className="min-h-10 py-2 px-2 bg-white border border-[#1d1c19]/20 hover:border-blue-700 hover:bg-blue-50/50 font-bold cursor-pointer active:scale-95 text-left transition flex items-center gap-1.5"
                   >
-                    Foto Botol Anorganik
+                    <Droplet className="size-3.5 text-blue-700 shrink-0" aria-hidden="true" />
+                    <span>2. Botol Anorganik</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickPreset("ANORGANIK", "/samples/sample-battery.png")}
+                    className="min-h-10 py-2 px-2 bg-rose-50 border border-rose-300 hover:border-rose-600 font-bold text-rose-900 cursor-pointer active:scale-95 text-left transition flex items-center gap-1.5"
+                  >
+                    <BatteryWarning className="size-3.5 shrink-0" aria-hidden="true" />
+                    <span>3. Bahaya Baterai</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickPreset("ORGANIK", "/samples/sample-blur.png")}
+                    className="min-h-10 py-2 px-2 bg-amber-50 border border-amber-300 hover:border-amber-600 font-bold text-amber-900 cursor-pointer active:scale-95 text-left transition flex items-center gap-1.5"
+                  >
+                    <ImageOff className="size-3.5 shrink-0" aria-hidden="true" />
+                    <span>4. Foto Buram</span>
                   </button>
                 </div>
               </div>

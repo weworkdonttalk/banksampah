@@ -27,9 +27,11 @@ export default function BottomNav() {
   }, [pathname]);
 
   // Dynamic nav items based on role
-  const isStaff = role === "PETUGAS" || role === "ADMIN";
+  const isAdmin = role === "ADMIN_BANJAR";
+  const isPetugas = role === "PETUGAS";
+  const isStaff = isAdmin || isPetugas;
 
-  const navItems: NavItem[] = isStaff
+  const navItems: NavItem[] = isAdmin
     ? [
         {
           href: "/",
@@ -43,21 +45,19 @@ export default function BottomNav() {
           ),
         },
         {
-          href: "/warga",
-          label: "Bank Sampah",
-          shortLabel: "Sampah",
+          href: "/dashboard",
+          label: "Monitoring IoT",
+          shortLabel: "IoT Ops",
           icon: (active) => (
             <svg className="size-5" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" />
-              <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
-              <path d="M12 18V6" />
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
             </svg>
           ),
         },
         {
           href: "/petugas",
           label: "Input Setoran",
-          shortLabel: "Setoran",
+          shortLabel: "Petugas",
           icon: (active) => (
             <svg className="size-5" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -76,6 +76,67 @@ export default function BottomNav() {
               <line x1="18" y1="20" x2="18" y2="10" />
               <line x1="12" y1="20" x2="12" y2="4" />
               <line x1="6" y1="20" x2="6" y2="14" />
+            </svg>
+          ),
+        },
+        {
+          href: "/warga",
+          label: "Bank Sampah",
+          shortLabel: "Sampah",
+          icon: (active) => (
+            <svg className="size-5" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
+              <path d="M12 18V6" />
+            </svg>
+          ),
+        },
+      ]
+    : isPetugas
+    ? [
+        {
+          href: "/",
+          label: "Beranda",
+          shortLabel: "Beranda",
+          icon: (active) => (
+            <svg className="size-5" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <polyline points="9 22 9 12 15 12 15 22" />
+            </svg>
+          ),
+        },
+        {
+          href: "/dashboard",
+          label: "Monitoring IoT",
+          shortLabel: "IoT Ops",
+          icon: (active) => (
+            <svg className="size-5" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+            </svg>
+          ),
+        },
+        {
+          href: "/petugas",
+          label: "Input Setoran",
+          shortLabel: "Setoran",
+          icon: (active) => (
+            <svg className="size-5" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="12" y1="18" x2="12" y2="12" />
+              <line x1="9" y1="15" x2="15" y2="15" />
+            </svg>
+          ),
+        },
+        {
+          href: "/warga",
+          label: "Bank Sampah",
+          shortLabel: "Sampah",
+          icon: (active) => (
+            <svg className="size-5" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
+              <path d="M12 18V6" />
             </svg>
           ),
         },
@@ -130,7 +191,7 @@ export default function BottomNav() {
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-[#1d1c19] text-[#f2f1ed] border-t border-white/10 pb-[env(safe-area-inset-bottom)]"
+      className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-[#1d1c19]/85 backdrop-blur-lg text-[#f2f1ed] border-t border-white/8 pb-[env(safe-area-inset-bottom)]"
       aria-label="Navigasi Utama"
     >
       <div

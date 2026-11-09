@@ -52,6 +52,52 @@ export const dbService = {
     return { ...user, banjar };
   },
 
+  async getUserByIdentifier(identifier: string) {
+    const raw = identifier.trim();
+    if (!raw) return null;
+
+    // Shortcut demo aliases
+    let targetEmail = "";
+    const lower = raw.toLowerCase();
+    if (lower === "wgr-dps-8841" || lower === "warga" || lower === "user") {
+      targetEmail = "warga@kayumas.banjar.id";
+    } else if (lower === "op-dlh-01" || lower === "petugas") {
+      targetEmail = "petugas@kayumas.banjar.id";
+    } else if (lower === "adm-kms-01" || lower === "admin") {
+      targetEmail = "admin@kayumas.banjar.id";
+    }
+
+    const queryKey = targetEmail || raw;
+
+    if (await isDatabaseConnected()) {
+      return prisma.user.findFirst({
+        where: {
+          OR: [
+            { email: { equals: queryKey, mode: "insensitive" } },
+            { phone: queryKey },
+            { id: queryKey },
+          ],
+        },
+        include: { banjar: true },
+      });
+    }
+
+    const mock = getMockDB();
+    const user = mock.users.find((u) => {
+      const uEmail = u.email.toLowerCase();
+      const target = queryKey.toLowerCase();
+      return (
+        uEmail === target ||
+        u.id.toLowerCase() === target ||
+        (u.phone && u.phone === queryKey)
+      );
+    });
+
+    if (!user) return null;
+    const banjar = mock.banjars.find((b) => b.id === user.banjarId) || null;
+    return { ...user, banjar };
+  },
+
   async registerBanjarWithAdmin(data: {
     kode: string;
     namaBanjar: string;
@@ -183,6 +229,20 @@ export const dbService = {
     }
     const mock = getMockDB();
     const st = mock.stations.find((s) => s.deviceId === deviceId);
+    if (!st) return null;
+    const banjar = mock.banjars.find((b) => b.id === st.banjarId) || null;
+    return { ...st, banjar };
+  },
+
+  async getStationById(id: string) {
+    if (await isDatabaseConnected()) {
+      return prisma.station.findUnique({
+        where: { id },
+        include: { banjar: true },
+      });
+    }
+    const mock = getMockDB();
+    const st = mock.stations.find((s) => s.id === id || s.deviceId === id);
     if (!st) return null;
     const banjar = mock.banjars.find((b) => b.id === st.banjarId) || null;
     return { ...st, banjar };
@@ -745,6 +805,8 @@ export const dbService = {
       kategori: "organik" | "anorganik" | "tidak_jelas";
       subjenis: string;
       confidence: number;
+      benda_berisiko_api: boolean;
+      jenis_risiko?: string | null;
       alasan_singkat: string;
       tips_pemilahan: string;
       rawResponse?: string;
@@ -772,8 +834,14 @@ export const dbService = {
     let rewardAmount = 0;
 
     // Aturan Keputusan:
+    // 0. Benda berisiko api terdeteksi -> Saldo tertahan, masuk antrean tinjauan petugas dengan label risiko
+    if (aiResult.benda_berisiko_api) {
+      newStatus = SessionStatus.NEEDS_REVIEW;
+      rewardAmount = 0;
+      isCheatingSuspected = false;
+    }
     // 1. Match + confidence >= 0.7 -> DISETUJUI
-    if (aiCatLower === userCatLower && aiResult.confidence >= 0.7) {
+    else if (aiCatLower === userCatLower && aiResult.confidence >= 0.7) {
       newStatus = SessionStatus.COMPLETED;
       rewardAmount = userCatLower === "organik" ? tariff.organicRate : tariff.inorganicRate;
     }
@@ -796,6 +864,10 @@ export const dbService = {
       rewardAmount = 0;
     }
 
+    const shouldIncrementRetry = !aiResult.benda_berisiko_api && (aiResult.confidence < 0.7 || aiResult.kategori === "tidak_jelas");
+    const nextRetryCount = shouldIncrementRetry ? session.retryCount + 1 : session.retryCount;
+    const rawResponse = aiResult.rawResponse || JSON.stringify(aiResult);
+
     if (await isDatabaseConnected()) {
       return prisma.$transaction(async (tx) => {
         const updatedSession = await tx.depositSession.update({
@@ -808,10 +880,10 @@ export const dbService = {
             aiConfidence: aiResult.confidence,
             aiReason: aiResult.alasan_singkat,
             aiTips: aiResult.tips_pemilahan,
-            aiRawResponse: aiResult.rawResponse ?? null,
+            aiRawResponse: rawResponse,
             isCorrected,
             isCheatingSuspected,
-            retryCount: aiResult.confidence < 0.7 || aiResult.kategori === "tidak_jelas" ? session.retryCount + 1 : session.retryCount,
+            retryCount: nextRetryCount,
             status: newStatus,
             rewardAmount,
           },
@@ -849,14 +921,13 @@ export const dbService = {
     mockSession.aiConfidence = aiResult.confidence;
     mockSession.aiReason = aiResult.alasan_singkat;
     mockSession.aiTips = aiResult.tips_pemilahan;
-    mockSession.aiRawResponse = aiResult.rawResponse || null;
+    mockSession.aiRawResponse = rawResponse;
     mockSession.isCorrected = isCorrected;
     mockSession.isCheatingSuspected = isCheatingSuspected;
-    if (aiResult.confidence < 0.7 || aiResult.kategori === "tidak_jelas") {
-      mockSession.retryCount += 1;
-    }
+    mockSession.retryCount = nextRetryCount;
     mockSession.status = newStatus;
     mockSession.rewardAmount = rewardAmount;
+    mockSession.updatedAt = new Date();
     mockSession.updatedAt = new Date();
 
     if (newStatus === SessionStatus.COMPLETED && rewardAmount > 0) {
